@@ -36,7 +36,7 @@ from spark_benchmark.model_registry import (
     is_vision_model,
     resolve_runnable_models,
 )
-from spark_benchmark.models import BackendConfig, ExperimentSpec, ModelConfig, PlatformConfig
+from spark_benchmark.models import BackendConfig, BackendKind, ExperimentSpec, ModelConfig, PlatformConfig
 from spark_benchmark.orchestration import BenchmarkPlan, run_benchmark_bundle
 from spark_benchmark.quant_sweep import enrich_with_quant_sweep
 from spark_benchmark.reporting import aggregate_runs, render_cli_benchmark_summary, write_report
@@ -175,6 +175,16 @@ def classify_models(
     classification path with ``cli.py``.
     """
     return classify_detected(ctx.model_configs, detected)
+
+
+def available_model_infos(ctx: ShellContext) -> list[OllamaModelInfo]:
+    """Return detected Ollama tags or the curated models for another backend."""
+    if ctx.backend_config.name != BackendKind.OLLAMA:
+        return [
+            OllamaModelInfo(tag=model.artifact_path or model.revision, config=model)
+            for model in ctx.model_configs
+        ]
+    return classify_models(ctx, detect_ollama_models(ctx.backend_config))
 
 
 def load_suite_metadata(repo_root: Path, suite_name: str) -> dict[str, Any] | None:
@@ -747,9 +757,8 @@ class TUIApp:
     # --- actions -----------------------------------------------------------
 
     def show_models(self) -> None:
-        detected = detect_ollama_models(self.ctx.backend_config)
-        classified = classify_models(self.ctx, detected)
-        detected_tags = {item.tag for item in detected}
+        classified = available_model_infos(self.ctx)
+        detected_tags = {item.tag for item in classified}
         self.log_blank()
         self.log("── Models ──")
         if not classified:
@@ -817,12 +826,11 @@ class TUIApp:
             self.log(f"    ...and {len(tasks) - 3} more")
 
     def do_run(self, stdscr: Any) -> None:
-        detected = detect_ollama_models(self.ctx.backend_config)
-        if not detected:
+        classified = available_model_infos(self.ctx)
+        if not classified:
             self.log_blank()
-            self.log("No models detected via Ollama. Is the daemon running?")
+            self.log("No models configured for this experiment.")
             return
-        classified = classify_models(self.ctx, detected)
 
         model_labels: list[str] = []
         disabled: set[int] = set()
