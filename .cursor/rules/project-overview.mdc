@@ -1,12 +1,12 @@
 ---
-description: spark-benchmark project overview, scope, and how to run things
+description: llm-benchmark project overview, scope, and how to run things
 alwaysApply: true
 ---
 
-# spark-benchmark
+# llm-benchmark
 
-Reproducible local-LLM benchmark harness for **NVIDIA DGX Spark only** (v1).
-v1 is intentionally Spark-only — never frame results as cross-platform comparisons.
+Reproducible benchmark harness for **locally-served LLMs** on a single machine.
+v1 compares models on one machine — never frame results as cross-machine comparisons.
 
 ## v1 lineup (canonical)
 
@@ -19,7 +19,7 @@ The curated lineup above is the *default*. Every CLI surface
 (`run` / `console` / `benchmark` / `wizard`) accepts
 `--allow-auto-detected` to also offer any non-vision/non-embedding tag
 that Ollama reports — those entries are auto-synthesized via
-`spark_benchmark.model_registry.synthesize_model_config` and labeled
+`llm_benchmark.model_registry.synthesize_model_config` and labeled
 `auto-detected`. The curses TUI behaves as if the flag were always on.
 
 ## Production backend
@@ -29,12 +29,12 @@ Ollama HTTP at `http://localhost:11434/api/generate`. `llamacpp` adapter exists;
 ## Run commands (always with `PYTHONPATH=src`)
 
 ```bash
-PYTHONPATH=src python3 -m spark_benchmark.cli wizard \
-  --experiment configs/experiments/spark-ollama-baseline.yaml --platform spark
+PYTHONPATH=src python3 -m llm_benchmark.cli wizard \
+  --experiment configs/experiments/ollama-baseline.yaml --platform local
 
-PYTHONPATH=src python3 -m spark_benchmark.cli benchmark \
+PYTHONPATH=src python3 -m llm_benchmark.cli benchmark \
   otestuj qwen gemma nemotron zamer se na rychlost spolehlivost \
-  --experiment configs/experiments/spark-ollama-baseline.yaml --platform spark
+  --experiment configs/experiments/ollama-baseline.yaml --platform local
 ```
 
 NL parser understands Czech + English keywords (`rychlost`/`speed`,
@@ -103,20 +103,20 @@ bands), per-suite dashboard cards with suite-specific charts.
 
 ## Custom (BYOT) suites
 
-User-supplied benchmark suites live in `spark_benchmark.custom_suites`
-and ship under `spark-bench run-custom` / `validate-custom`. v0.2.0
+User-supplied benchmark suites live in `llm_benchmark.custom_suites`
+and ship under `llm-bench run-custom` / `validate-custom`. v0.2.0
 implements **Mode A only** (`mode: quick`, pass-through, no scoring);
 `mode: scored` is rejected at load time. v0.2.1 adds a top-level
-`Custom` entry to the curses TUI (`spark-bench shell`) — it discovers
+`Custom` entry to the curses TUI (`llm-bench shell`) — it discovers
 suites from `examples/custom-tests/**/suite.yaml` plus prior runs in
 `results/custom/<slug>/<run-id>/manifest.json` (helper:
 `shell.discover_custom_suites`) and writes manifests with
 `source: "shell"` so reporting can tell TUI runs apart from CLI runs.
 
-v0.2.2 adds **`spark_benchmark.quick`** — `build_quick_suite(prompt)`
+v0.2.2 adds **`llm_benchmark.quick`** — `build_quick_suite(prompt)`
 synthesises a one-task `CustomSuiteDefinition` in memory
 (`task_id="ad-hoc"`) and feeds it to the *same* `run_custom_suite_quick`
-runner. Surfaces: `spark-bench quick "..."` (CLI) and the TUI `Quick`
+runner. Surfaces: `llm-bench quick "..."` (CLI) and the TUI `Quick`
 menu entry (`do_quick`). Saved prompts default to the git-ignored
 `examples/custom-tests/quick-saved/<slug>/suite.yaml`. Manifests carry
 `source: "cli-quick" | "shell-quick"` and `ad_hoc_prompt: true`.

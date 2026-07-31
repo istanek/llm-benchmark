@@ -2,7 +2,7 @@
 """Diagnostic probe for the long_context_retrieval suite.
 
 This is NOT part of the suite — it is a one-shot reconnaissance tool you
-run against a *real* Ollama on the Spark before the long-context runner
+run against a *real* local Ollama before the long-context runner
 (layer 2) is written. It answers the questions that fakes cannot:
 
   A. Connectivity + which models are loaded, and each model's claimed
@@ -29,7 +29,7 @@ Usage:
   scripts/probe_long_context.py --haystack data/long_context/haystacks/melville_moby_dick.txt
   scripts/probe_long_context.py --max-context 65536 --json /tmp/probe.json
 
-Only the standard library is used, so this runs anywhere the Spark can
+Only the standard library is used, so this runs anywhere Python can
 reach the Ollama endpoint.
 """
 
@@ -346,7 +346,7 @@ def probe_telemetry() -> dict[str, Any]:
 # --------------------------------------------------------------------- #
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Long-context reconnaissance probe for Ollama on Spark")
+    ap = argparse.ArgumentParser(description="Long-context reconnaissance probe for a local Ollama")
     ap.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     ap.add_argument("--models", default="", help="comma-separated tags; default = auto-detect all")
     ap.add_argument("--haystack", default="", help="path to a real haystack .txt (optional)")

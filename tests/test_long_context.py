@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from spark_benchmark.long_context import (
+from llm_benchmark.long_context import (
     FAST_PROFILE,
     FULL_PROFILE,
     HaystackSpec,
@@ -30,7 +30,7 @@ from spark_benchmark.long_context import (
     select_needle_index,
     slice_haystack,
 )
-from spark_benchmark.models import (
+from llm_benchmark.models import (
     BackendConfig,
     BackendKind,
     GenerationResult,
@@ -38,7 +38,7 @@ from spark_benchmark.models import (
     ModelConfig,
     SamplingConfig,
 )
-from spark_benchmark.reliability import fixture_path_for_suite_name
+from llm_benchmark.reliability import fixture_path_for_suite_name
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

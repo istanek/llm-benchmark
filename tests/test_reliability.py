@@ -1,13 +1,13 @@
 from pathlib import Path
 
-from spark_benchmark.config import load_backend
-from spark_benchmark.reliability import (
+from llm_benchmark.config import load_backend
+from llm_benchmark.reliability import (
     build_summary,
     load_reliability_suite,
     score_hallucination_task,
     score_structured_output_task,
 )
-from spark_benchmark.suites import SuiteTask
+from llm_benchmark.suites import SuiteTask
 
 
 def test_load_reliability_suite_fixture() -> None:
@@ -124,7 +124,7 @@ def _make_model_entry(name: str, pass_rate: float, **kwargs) -> dict:
 
 def test_overall_rank_includes_all_quality_suites_that_ran() -> None:
     """All quality suites that ran contribute equally to quality_score."""
-    from spark_benchmark.reporting import _overall_rank_rows
+    from llm_benchmark.reporting import _overall_rank_rows
 
     # Model A: perfect grounding but 0% code gen
     # Model B: 50% grounding but 100% code gen
@@ -156,7 +156,7 @@ def test_overall_rank_includes_all_quality_suites_that_ran() -> None:
 
 def test_overall_rank_excludes_missing_suites_from_denominator() -> None:
     """Suites that didn't run are not counted against models that weren't tested on them."""
-    from spark_benchmark.reporting import _overall_rank_rows
+    from llm_benchmark.reporting import _overall_rank_rows
 
     # Only hallucination ran — code_gen is absent
     aggregate = {
@@ -174,7 +174,7 @@ def test_overall_rank_excludes_missing_suites_from_denominator() -> None:
 
 def test_overall_rank_long_context_contributes_when_run() -> None:
     """long_context_retrieval enters the score when it's part of the bundle."""
-    from spark_benchmark.reporting import _overall_rank_rows
+    from llm_benchmark.reporting import _overall_rank_rows
 
     # Model A: 100% hallucination, 33% long context
     # Model B: 80% hallucination, 90% long context

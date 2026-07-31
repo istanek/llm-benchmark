@@ -1,6 +1,6 @@
 ---
-description: Python conventions for spark-benchmark source and tests
-globs: src/spark_benchmark/**/*.py,tests/**/*.py
+description: Python conventions for llm-benchmark source and tests
+globs: src/llm_benchmark/**/*.py,tests/**/*.py
 alwaysApply: false
 ---
 

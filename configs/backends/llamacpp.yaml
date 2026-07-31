@@ -7,4 +7,4 @@ default_args: []
 options:
   mode: cli
 notes:
-  - Shared baseline backend for reproducible Spark model-to-model comparisons
+  - Shared baseline backend for reproducible model-to-model comparisons

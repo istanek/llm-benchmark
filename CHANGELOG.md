@@ -7,6 +7,115 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Project renamed from `spark-benchmark` to `llm-benchmark`.** The harness is
+  no longer DGX Spark-specific, so the naming no longer claims it is:
+  - Python package `spark_benchmark` → `llm_benchmark` (`src/llm_benchmark/`).
+  - Console scripts: `llm-bench` (Typer CLI) and `llm-benchmark` /
+    `llm_benchmark` (TUI shell). The old `spark-bench` / `spark-benchmark`
+    entry points are kept as deprecated aliases and will be removed in 1.0.
+    **Re-run `pip install -e .` after pulling** — the old package directory is
+    gone, so a stale editable install will fail to import.
+  - CLI banner art now reads `LLM`; the panel title is "LLM Benchmark". The
+    `SPARK_BENCH_NO_BANNER` env var still works alongside the new
+    `LLM_BENCH_NO_BANNER`.
+  - HTML report hero breadcrumb reads "LLM BENCHMARK" and the default tagline
+    no longer names any vendor.
+- **Platform config generalised.** `configs/platforms/spark.yaml` →
+  `configs/platforms/local.yaml` (`name: local`, `display_name: Local
+  machine`, auto-detected architecture/OS). Concrete CPU/GPU/memory facts
+  already come from `hardware.discover_hardware()` per run.
+  **`--platform spark` is now `--platform local`**; `shell.DEFAULT_PLATFORM`
+  changed accordingly.
+- **Experiment configs lost their `spark-` prefix**: `spark-ollama-baseline.yaml`
+  → `ollama-baseline.yaml`, and likewise for `llamacpp-baseline`,
+  `trt-reliability`, `code-generation`, `sustained`, `quant-sweep`,
+  `laguna-smoke`. Internal experiment names dropped the prefix too
+  (`spark-ollama-v1-baseline` → `ollama-v1-baseline`), so aggregates keyed on
+  the old names will not match older runs.
+- **Fixture content de-branded, with version bumps where the change is
+  behavioural:**
+  - `openclaw_speed_v1` 0.1.0 → 0.2.0 — the probe prompt asked the model to
+    explain what DGX Spark is; it now asks about local LLM benchmarking.
+    Timing results are comparable across the change, generated text is not.
+  - `practical_structured_output_v1` 0.1.0 → 0.2.0 — calendar task title
+    "Spark Demo Rehearsal" → "Q3 Demo Rehearsal" (context and expected JSON
+    changed together).
+  - `quantization_sweep_v1` — description/notes only, no version bump.
+- Documentation (`README.txt`, `docs/`, `METHODOLOGY.md`, Cursor rules)
+  reworded from "Spark-only" to "single-machine". Hardware is still named in
+  the three places where it changes how a measurement must be read (unified
+  memory hiding `nvidia-smi memory.used`, and the provenance of the v0.4.x
+  long-context findings).
+
+### Fixed
+
+- **Grounding scorer no longer passes outputs that contradict the expected
+  behaviour.** Three concrete defects in `reliability.score_hallucination_task`:
+  - `NEGATION_PHRASES` were matched as substrings, so `"no"` matched inside
+    *nothing* / *north* / *know* and `"not"` inside *cannot* / *note*. Any
+    output of moderate length therefore counted as a negation, and
+    `correct_user` collapsed into a plain token-overlap check — "Nothing to
+    note: 1998." scored as a correct rejection of a false premise. Phrase
+    matching is now whole-token (`tokenize` + `contains_phrase`).
+  - `answer_from_context` passed when *any single* reference token appeared
+    anywhere in the output, so a refusal that quoted the value ("The context
+    does not mention 1998") scored as a correct answer of 1998. Scoring now
+    uses the fixture's explicit `expected_values` contract (falling back to
+    literal reference match or ≥ 60 % content-token coverage) and fails
+    outright when the output abstains.
+  - `abstain` matched a fixed English phrase list, letting a hedged
+    fabrication through on `"unknown"` ("…is unknown to me, but it was likely
+    Dr. Novak") while rejecting common phrasings such as "provides no
+    information". The list gained the missing phrasings and a hedged-guess
+    guard (`HEDGED_GUESS_PHRASES`) now vetoes abstention-plus-fabrication.
+- **`repetitions` and `warmup_runs` are read.** Both fields existed on
+  `ExperimentSpec` (defaults 3 and 1) and were set by every experiment YAML,
+  but no runner ever read them: every suite ran each task exactly once with no
+  warmup. `run_benchmark_bundle` and `cli run` now pass them to the grounding,
+  structured-output, speed and sustained suites. Each repetition offsets the
+  seed so repeats are not trivially identical.
+- **Grounding token budget raised from 64 to 256** (`GROUNDING_MAX_TOKENS`).
+  The old cap truncated models that emit a reasoning preamble before their
+  answer and scored the truncation as a hallucination. Truncated rows are now
+  flagged (`evaluation.truncated`, reason suffix `+truncated_output`) in both
+  reliability suites so a budget that is still too small is visible in the
+  results.
+- **Timing probes no longer report a synthetic 100 % pass rate.**
+  `openclaw_speed` marks its summary `scoring: "performance_probe"`; markdown,
+  CLI and HTML reports render `n/a` in the pass column for probe suites (with
+  name-based detection so pre-0.5.3 runs are handled too), and the HTML speed
+  card shows timed-generation counts instead of three identical pass bars.
+  The overall ranking was already unaffected — `openclaw_speed` is not in
+  `_QUALITY_SUITE_KEYS`.
+
+### Added
+
+- **`llm_benchmark.stats` — Wilson score intervals.** Pass rates are now
+  reported with their sample size and a 95 % interval in the markdown report,
+  the CLI benchmark summary, per-suite `summary.md`, and the HTML per-model
+  table (new `n` / `95% CI` / `Consistency` columns). At the v1 suite sizes the
+  intervals are wide, which is the point: a one-task difference should not read
+  as a result. `aggregate_runs` exposes `ci_low` / `ci_high` / `ci_margin` per
+  model.
+- **Repetition consistency reporting.** `build_summary` returns `tasks`,
+  `repetitions`, `unstable_task_ids`, `consistency_rate` and `truncated_rows`
+  per model; `failed_task_ids` is deduplicated across repetitions. This is the
+  "consistency across repeated runs" axis METHODOLOGY.md asks for.
+- **Explicit fixture value contract.** `data/reliability/hallucination_grounding_v1.json`
+  (0.2.0 → 0.3.0) declares `expected_values` on every `answer_from_context` and
+  `correct_user` task, plus `rejected_values` (the false premise) on the latter.
+
+### Tests
+
+- 22 new tests in `tests/test_scoring_hardening.py` pinning each fixed failure
+  mode: token-vs-substring matching, sycophantic agreement, abstention that
+  quotes the value, hedged guesses, truncation flagging, seed-varied
+  repetitions, the 256-token grounding budget, consistency accounting,
+  performance-probe tagging, and Wilson-interval behaviour at small n and at
+  the 0 % / 100 % extremes.
+
 ## [0.5.2] - 2026-06-07
 
 ### Fixed
@@ -40,7 +149,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`spark_benchmark.quant_sweep` — post-processor and HTML tradeoff table.**
+- **`llm_benchmark.quant_sweep` — post-processor and HTML tradeoff table.**
   - `aggregate_quant_sweep(aggregate, model_configs, fixture)` groups
     `aggregate_runs()` output by `base_model × quantization` using the
     `base_model` field already present on `ModelConfig`. Suite-name version
@@ -103,7 +212,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `passed: null`. `validate_custom_suite` now warns when `mode: scored` is
   used but no scorer is configured for a task.
   `load_custom_suite` no longer rejects `mode: scored`.
-- **`--dry-run` flag on `spark-bench run-custom`.** Executes one task against
+- **`--dry-run` flag on `llm-bench run-custom`.** Executes one task against
   one model and stops without writing any files. The JSON output carries
   `"dry_run": true` and a single row. Useful for sanity-checking backend
   connectivity and suite config before a long sweep.
@@ -116,7 +225,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/quantization-sweep-spec.md` — implementation-ready spec.
   - `data/quant/quantization_sweep_v1.json` — fixture with reference
     thresholds for the v1 lineup (all `enforce: false` until baselines run).
-  - `configs/experiments/spark-quant-sweep.yaml` — experiment covering Q8_0
+  - `configs/experiments/quant-sweep.yaml` — experiment covering Q8_0
     and Q4_K_M variants of all three base models.
   - Six new model config YAMLs: `qwen-3.6-q8`, `qwen-3.6-q4`, `gemma-4-q8`,
     `gemma-4-q4`, `nemotron-3-q8`, `nemotron-3-q4`.
@@ -165,7 +274,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or an explicit Ollama Cloud `-cloud` tag — the latter is synthesized on the
   fly, so cloud models work without an experiment YAML entry or `/api/tags`
   listing. Example:
-  `run --experiment … --platform spark --run-suite hallucination_grounding --model gpt-oss:120b-cloud`.
+  `run --experiment … --platform local --run-suite hallucination_grounding --model gpt-oss:120b-cloud`.
 
 ### Fixed
 
@@ -272,7 +381,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Long-context retrieval in the interactive TUI + HTML reports (layer 3).**
-  `long_context_retrieval` now shows up in the `spark-bench shell` suite
+  `long_context_retrieval` now shows up in the `llm-bench shell` suite
   picker and `Suites`/`Info` screens (grid-aware task counts:
   lengths × depths × needles/cell). A preflight checks the git-ignored
   Project Gutenberg corpora are present and cleanly skips the suite with a
@@ -422,7 +531,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   test count: 38 (was 11).
 
 - **Polished standalone HTML reports.** New
-  ``spark_benchmark.reporting_html`` module renders both flavours of
+  ``llm_benchmark.reporting_html`` module renders both flavours of
   run output as a single self-contained HTML page — no JavaScript,
   no CDN, no external assets. Open the file from a USB stick, attach
   it to an email, paste it into a wiki: it just works.
@@ -442,7 +551,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     output, error messages) so YAML suites containing ``<script>``
     or ``<img onerror=...>`` payloads can't escape the ``<pre>`` /
     ``<code>`` containers.
-- **CLI / TUI surface for HTML.** ``spark-bench benchmark``,
+- **CLI / TUI surface for HTML.** ``llm-bench benchmark``,
   ``wizard``, ``aggregate``, ``run-custom``, and ``quick`` all log
   the HTML path next to the existing markdown / JSON paths.
   ``aggregate``'s JSON output gained ``"aggregate_html"`` and the
@@ -459,11 +568,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ``.md`` and ``.html`` siblings land next to each other.
 
 - **Quick (ad-hoc one-shot prompts).** New
-  ``spark_benchmark.quick`` module surfaces the lightest BYOT
+  ``llm_benchmark.quick`` module surfaces the lightest BYOT
   workflow yet — type one prompt, fan it out to every model you
   picked, get the same ``summary.md`` ``run-custom`` produces. No
   YAML required up front.
-- **CLI command ``spark-bench quick "your prompt here"``.** Builds
+- **CLI command ``llm-bench quick "your prompt here"``.** Builds
   a one-task ``CustomSuiteDefinition`` in memory
   (``task_id="ad-hoc"``) and feeds it to the existing
   ``run_custom_suite_quick`` runner — single runner, single
@@ -557,7 +666,7 @@ over with identical commit hashes), and fixes a long-standing
 ### Changed
 
 - **Project home moved from GitLab to GitHub
-  (`https://github.com/istanek/spark-benchmark`).** All Git history
+  (`https://github.com/istanek/llm-benchmark`).** All Git history
   and both release tags (`v0.1.0`, `v0.2.0`) carry over unchanged
   (identical commit hashes). Knock-on edits in this commit:
   - ``CHANGELOG.md`` compare/tag link references repointed from
@@ -585,9 +694,9 @@ over with identical commit hashes), and fixes a long-standing
 
 ### Added
 
-- **Custom (BYOT) menu item in the curses TUI (`spark-bench shell`).**
+- **Custom (BYOT) menu item in the curses TUI (`llm-bench shell`).**
   A new ``Custom`` entry sits next to ``Run`` and walks the user
-  through the same flow as ``spark-bench run-custom`` on the CLI:
+  through the same flow as ``llm-bench run-custom`` on the CLI:
   it discovers suite YAMLs (shipped templates under
   ``examples/custom-tests/`` plus prior runs under
   ``results/custom/<slug>/<run-id>/``), loads + validates the
@@ -597,7 +706,7 @@ over with identical commit hashes), and fixes a long-standing
   ``results/custom/<slug>/<run-id>/`` with ``manifest.json`` tagged
   ``source: shell`` so reporting can tell TUI runs apart from CLI
   runs. ``--allow-auto-detected`` is implicitly on for the TUI
-  entry, matching ``spark-bench run-custom``.
+  entry, matching ``llm-bench run-custom``.
 - **`shell.discover_custom_suites(repo_root)` helper** — pure
   function that returns ``CustomSuiteCandidate`` items, dedupes
   recent runs by absolute ``suite_path`` (newest ``run-id`` wins),
@@ -624,12 +733,12 @@ GitLab project page to the plain-language `README.txt`.
 ### Added
 
 - **Bring-Your-Own-Test (BYOT) subsystem — Mode A.** New
-  `spark_benchmark.custom_suites` module with a YAML / JSON suite
+  `llm_benchmark.custom_suites` module with a YAML / JSON suite
   format (`CustomSuiteDefinition`), a Pydantic-validated loader,
   resume-friendly runner that records errors per `(model, task)` pair
   without aborting, side-by-side Markdown summary, and a
   ``slugify_suite_name`` helper for run-bundle naming.
-- **CLI commands `spark-bench run-custom` and `spark-bench validate-custom`.**
+- **CLI commands `llm-bench run-custom` and `llm-bench validate-custom`.**
   `run-custom` defaults to ``--allow-auto-detected`` ON (custom suites
   exist precisely for non-curated workloads) and writes its bundles to
   ``results/custom/<slug>/<run-id>/`` with a manifest tagged
@@ -652,7 +761,7 @@ GitLab project page to the plain-language `README.txt`.
   unknown model refs), end-to-end runner including resume + error
   recording, summary aggregation, Markdown rendering, and the
   ``slugify_suite_name`` helper.
-- **Shared model registry** (`spark_benchmark.model_registry`) extracted
+- **Shared model registry** (`llm_benchmark.model_registry`) extracted
   from `shell.py`. One classification path is now used by the curses TUI,
   the wizard, the console REPL, the natural-language `benchmark` command,
   and the plain `run` command.
@@ -679,7 +788,7 @@ GitLab project page to the plain-language `README.txt`.
 
 ## [0.1.0] - 2026-05-20
 
-Initial public release of the spark-benchmark scaffold.
+Initial public release of the llm-benchmark scaffold.
 
 ### Added
 
@@ -687,7 +796,7 @@ Initial public release of the spark-benchmark scaffold.
   - YAML-driven experiment definitions validated through Pydantic v2
     (`ExperimentSpec`, `PlatformConfig`, `BackendConfig`, `ModelConfig`,
     `SamplingConfig`).
-  - Typer CLI (`spark-bench`, `spark-benchmark`) with `run`, `console`,
+  - Typer CLI (`llm-bench`, `llm-benchmark`) with `run`, `console`,
     `benchmark`, `wizard`, `aggregate`, `report`, `dashboard`, `shell`
     subcommands.
   - Curses TUI shell with model / suite multiselect, chat mode, log
@@ -740,7 +849,7 @@ Initial public release of the spark-benchmark scaffold.
   - `configs/models/`: `qwen-3.6`, `gemma-4`, `nemotron-3` plus a
     tombstone for the retired `nemotron-3-super`.
   - `configs/backends/`: `ollama`, `llamacpp`, `trt-llm`.
-  - `configs/platforms/spark.yaml`.
+  - `configs/platforms/local.yaml`.
 - **Tests** — plain-python, runnable via `pytest tests/` or `python3
   tests/test_<name>.py` (each file has a `_run_all()` fallback).
 - **Docs** — `README.md`, `METHODOLOGY.md`, `docs/architecture.md`,
@@ -759,7 +868,7 @@ Initial public release of the spark-benchmark scaffold.
   `docs/extensions-spec.md` but not yet implemented.
 - TRT-LLM and vLLM backends fall through to the stub adapter.
 
-[Unreleased]: https://github.com/istanek/spark-benchmark/compare/v0.2.1...HEAD
-[0.2.1]: https://github.com/istanek/spark-benchmark/releases/tag/v0.2.1
-[0.2.0]: https://github.com/istanek/spark-benchmark/releases/tag/v0.2.0
-[0.1.0]: https://github.com/istanek/spark-benchmark/releases/tag/v0.1.0
+[Unreleased]: https://github.com/istanek/llm-benchmark/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/istanek/llm-benchmark/releases/tag/v0.2.1
+[0.2.0]: https://github.com/istanek/llm-benchmark/releases/tag/v0.2.0
+[0.1.0]: https://github.com/istanek/llm-benchmark/releases/tag/v0.1.0

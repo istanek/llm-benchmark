@@ -1,7 +1,7 @@
 {
   "name": "openclaw_speed_v1",
   "category": "performance",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Short prompt set for measuring TTFT and decode speed on OpenClaw-like tasks.",
   "notes": [
     "No pass/fail grading. The purpose is consistent latency and throughput capture.",
@@ -10,7 +10,7 @@
   "tasks": [
     {
       "task_id": "speed-v1-001-brief-answer",
-      "prompt": "Explain in one short paragraph what DGX Spark is and why someone would benchmark local LLMs on it.",
+      "prompt": "Explain in one short paragraph what a local LLM benchmark measures and why someone would run one before choosing a model.",
       "context": null,
       "reference": null,
       "tags": ["speed", "brief-answer"],

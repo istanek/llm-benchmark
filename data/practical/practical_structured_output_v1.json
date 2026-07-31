@@ -1,7 +1,7 @@
 {
   "name": "practical_structured_output_v1",
   "category": "custom",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Practical structured-output fixture for demo scenarios. Models must return valid JSON only and preserve the requested fields and values exactly.",
   "notes": [
     "Uses deterministic tasks with exact-match JSON scoring.",
@@ -19,8 +19,8 @@
     {
       "task_id": "pso-v1-002-calendar-reminder",
       "prompt": "Return JSON only with keys title, day, start, duration_min, and bring_laptop.",
-      "context": "Reminder: Demo rehearsal on Friday at 14:30 for 45 minutes. Title should be Spark Demo Rehearsal. bring_laptop true.",
-      "reference": "{\"title\":\"Spark Demo Rehearsal\",\"day\":\"Friday\",\"start\":\"14:30\",\"duration_min\":45,\"bring_laptop\":true}",
+      "context": "Reminder: Demo rehearsal on Friday at 14:30 for 45 minutes. Title should be Q3 Demo Rehearsal. bring_laptop true.",
+      "reference": "{\"title\":\"Q3 Demo Rehearsal\",\"day\":\"Friday\",\"start\":\"14:30\",\"duration_min\":45,\"bring_laptop\":true}",
       "tags": ["json", "calendar"],
       "metadata": {"expected_behavior": "json_exact_match"}
     },

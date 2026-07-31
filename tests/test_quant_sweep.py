@@ -1,11 +1,11 @@
-"""Tests for spark_benchmark.quant_sweep."""
+"""Tests for llm_benchmark.quant_sweep."""
 
 from pathlib import Path
 
 import pytest
 
-from spark_benchmark.models import ModelConfig
-from spark_benchmark.quant_sweep import (
+from llm_benchmark.models import ModelConfig
+from llm_benchmark.quant_sweep import (
     BaseModelSpec,
     QuantSweepFixture,
     aggregate_quant_sweep,
@@ -264,7 +264,7 @@ def test_regressions_skips_null_reference():
 # --------------------------------------------------------------------- #
 
 def test_html_card_renders():
-    from spark_benchmark.reporting_html import _render_quant_sweep_card
+    from llm_benchmark.reporting_html import _render_quant_sweep_card
     result_data = {
         "base_model": "test-7b",
         "display_name": "Test 7B",
@@ -292,12 +292,12 @@ def test_html_card_renders():
 
 
 def test_html_section_empty_on_no_sweep():
-    from spark_benchmark.reporting_html import _render_quant_sweep_section
+    from llm_benchmark.reporting_html import _render_quant_sweep_section
     assert _render_quant_sweep_section({}) == ""
 
 
 def test_html_report_includes_sweep_from_aggregate():
-    from spark_benchmark.reporting_html import render_canonical_report_html
+    from llm_benchmark.reporting_html import render_canonical_report_html
     agg = _aggregate()
     sweep = aggregate_quant_sweep(agg, _model_configs(), _fixture())
     agg["quant_sweep"] = sweep
@@ -307,7 +307,7 @@ def test_html_report_includes_sweep_from_aggregate():
 
 
 def test_html_report_without_sweep_unchanged():
-    from spark_benchmark.reporting_html import render_canonical_report_html
+    from llm_benchmark.reporting_html import render_canonical_report_html
     agg = _aggregate()
     html = render_canonical_report_html(agg)
     assert "Quantization tradeoff" not in html
@@ -345,7 +345,7 @@ def test_enrich_skips_when_fixture_missing(tmp_path):
 
 
 def test_enrich_end_to_end_html(tmp_path):
-    from spark_benchmark.reporting_html import render_canonical_report_html
+    from llm_benchmark.reporting_html import render_canonical_report_html
     fixture_path = tmp_path / "quantization_sweep_v1.json"
     fixture_path.write_text(_fixture().model_dump_json(), encoding="utf-8")
     agg = _aggregate()

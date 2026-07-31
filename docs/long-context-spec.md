@@ -9,13 +9,17 @@ the older sketch in `docs/extensions-spec.md` (Suite 1), **this document
 wins** — the older one predates the harness and assumes structure the
 code does not have.
 
-> **Scope.** The harness is **Spark-only**. Every length, default, and
-> hypothesis here assumes an NVIDIA DGX Spark with its 128 GB unified
-> memory, serving models locally via Ollama (or llama.cpp). There is no
-> Mac mini, no cross-platform marketing, no "Spark vs. X" framing in
-> this suite. The long-context story *is* the Spark story, but we tell
-> it by reporting honest Spark numbers, not by staging a comparison the
-> harness is not built to run.
+> **Scope.** The harness is **single-machine**. Every length, default,
+> and hypothesis here assumes one host with a large unified memory
+> (~128 GB), serving models locally via Ollama (or llama.cpp). There is
+> no cross-machine marketing and no "machine A vs. machine B" framing in
+> this suite: we report honest numbers from one host rather than staging
+> a comparison the harness is not built to run.
+>
+> **Measurement provenance.** The empirical findings below were taken on
+> an NVIDIA DGX Spark (128 GB unified memory) in June 2026. The hardware
+> is named where it changes how a number must be read — not as
+> positioning.
 
 ---
 
@@ -28,7 +32,7 @@ until the suite that actually needs to bend it):
 | Release | Suite | Why this slot | Rough cost |
 | --- | --- | --- | --- |
 | **v0.3.0** ✅ | Marketing-grade HTML reports | Already shipped/tagged | — |
-| **v0.4.0** | `long_context_retrieval` (this doc) | The core Spark value proposition; mostly additive | 3–4 weeks |
+| **v0.4.0** | `long_context_retrieval` (this doc) | The core unified-memory value proposition; mostly additive | 3–4 weeks |
 | **v0.5.0** | `quantization_sweep` | Almost no new runtime code — reuses existing quality suites; high community value | ~2 weeks |
 | **v0.6.0** | `concurrent_serving` | The only suite that reworks the runner core (threaded clients, `llama-server` mode, `OLLAMA_NUM_PARALLEL`) — gets its own cycle | 4–6 weeks |
 
@@ -54,7 +58,7 @@ Repeat across:
 The output is a **heatmap** per model: length on one axis, depth on the
 other, colour = pass rate. A model that "supports 128k context" but goes
 blind past 32k shows up as a red bottom band — exactly the failure the
-Spark memory story needs to surface honestly.
+unified-memory story needs to surface honestly.
 
 ---
 
@@ -180,10 +184,10 @@ headline result, not a missing data point.
 
 ---
 
-## Empirical findings from the Spark probe (2026-06-01)
+## Empirical findings from the hardware probe (2026-06-01)
 
 Before writing the runner, `scripts/probe_long_context.py` was run
-against the live Ollama on the Spark (9 models). These findings are
+against a live local Ollama (9 models, DGX Spark host). These findings are
 decision-grade and shape layer 2:
 
 ### Tokenization — `prompt_eval_count` is reliable ground truth
@@ -210,7 +214,7 @@ to land on the target token count. `prompt_eval_count` is the oracle.
 ### `num_ctx` must be set explicitly
 
 Ollama's adapter does **not** currently set `options.num_ctx`
-(`src/spark_benchmark/runners/ollama.py`). On this Ollama the default
+(`src/llm_benchmark/runners/ollama.py`). On this Ollama the default
 window auto-sized fine up to 65k (a ~65 536-token prompt loaded 63 871
 uncapped), so it is not catastrophic today — but it is version- and
 config-dependent. **Layer 2 must set `options.num_ctx` per request** to
@@ -264,19 +268,20 @@ borderline for gemma-class models at 131k. Long-context runs should use
 a **≥ 600 s** per-request timeout. (65k measured: nemotron 26.1 s
 prefill, wall 34 s — comfortable.)
 
-### Memory telemetry — `nvidia-smi` does NOT report memory on Spark
+### Memory telemetry — `nvidia-smi` does NOT report memory on unified-memory hosts
 
-The biggest finding for the memory story: on the Spark,
+The biggest finding for the memory story: on a unified-memory host
+(measured on DGX Spark),
 `nvidia-smi --query-gpu=memory.used,memory.total` returns **`[N/A]`**
 (unified LPDDR5X memory is not exposed the way discrete-GPU VRAM is).
 Temperature (74 °C) and power (75 W) *do* work.
 
 → **Consequence:** the "peak memory vs. context length" chart — a
-centerpiece of the Spark 128 GB story — **cannot** use the obvious
+centerpiece of the 128 GB unified-memory story — **cannot** use the obvious
 `nvidia-smi` memory query. Layer 2/3 must source memory elsewhere:
 - **Ollama `/api/ps`** reports each loaded model's `size` / `size_vram`
   (best candidate — directly attributable to the model+context).
-- `/proc/meminfo` (unified memory == system memory on Spark).
+- `/proc/meminfo` (unified memory == system memory on such hosts).
 - `tegrastats` if available.
 
 This is flagged as an open item for the telemetry layer; it does not
@@ -374,23 +379,23 @@ no `suites/` subpackage, no `reporting/` subpackage, no
 
 | Touch point | File | What changes |
 | --- | --- | --- |
-| Suite runner | **`src/spark_benchmark/long_context.py`** (NEW, flat module — sibling of `reliability.py`, `code_generation.py`) | Loader, per-model tokenize+truncate, needle insertion, run loop, substring scorer, three-state cell logic |
-| Fixture registry | `src/spark_benchmark/reliability.py` → `fixture_path_for_suite_name` | Add `long_context_retrieval` → `data/long_context/long_context_retrieval_v1.json` |
-| Orchestration | `src/spark_benchmark/orchestration.py` | Import + dispatch the runner; add NL aliases ("long context", "needle", "dlouhý kontext") to `parse_benchmark_request` |
-| Aggregation | `src/spark_benchmark/reporting.py` → `aggregate_runs` | New if-branch extracting heatmap grid + first-failure length + prefill curve into the model bucket's `extra` |
-| Canonical suite list | `src/spark_benchmark/reporting_html.py` → `_CANONICAL_SUITES` | Append `"long_context_retrieval"` |
-| HTML dashboard | `src/spark_benchmark/reporting_html.py` | New `_svg_heatmap` helper + `_render_suite_long_context` (heatmap, prefill curve, first-failure table) wired into the suite dispatcher |
-| Model schema | `src/spark_benchmark/models.py` → `ModelConfig` | Add optional `base_model: str | None = None` |
-| Telemetry | `src/spark_benchmark/runners/{ollama,llamacpp}.py` | Audit/ensure `prefill_time_s` + a new `context_tokens_loaded` are populated honestly for long contexts |
+| Suite runner | **`src/llm_benchmark/long_context.py`** (NEW, flat module — sibling of `reliability.py`, `code_generation.py`) | Loader, per-model tokenize+truncate, needle insertion, run loop, substring scorer, three-state cell logic |
+| Fixture registry | `src/llm_benchmark/reliability.py` → `fixture_path_for_suite_name` | Add `long_context_retrieval` → `data/long_context/long_context_retrieval_v1.json` |
+| Orchestration | `src/llm_benchmark/orchestration.py` | Import + dispatch the runner; add NL aliases ("long context", "needle", "dlouhý kontext") to `parse_benchmark_request` |
+| Aggregation | `src/llm_benchmark/reporting.py` → `aggregate_runs` | New if-branch extracting heatmap grid + first-failure length + prefill curve into the model bucket's `extra` |
+| Canonical suite list | `src/llm_benchmark/reporting_html.py` → `_CANONICAL_SUITES` | Append `"long_context_retrieval"` |
+| HTML dashboard | `src/llm_benchmark/reporting_html.py` | New `_svg_heatmap` helper + `_render_suite_long_context` (heatmap, prefill curve, first-failure table) wired into the suite dispatcher |
+| Model schema | `src/llm_benchmark/models.py` → `ModelConfig` | Add optional `base_model: str | None = None` |
+| Telemetry | `src/llm_benchmark/runners/{ollama,llamacpp}.py` | Audit/ensure `prefill_time_s` + a new `context_tokens_loaded` are populated honestly for long contexts |
 | CLI/TUI | n/a (additive) | Suite appears automatically in multiselect + NL routing once registered |
 
 ### New files
 
 ```
-src/spark_benchmark/long_context.py                 # suite runner
+src/llm_benchmark/long_context.py                 # suite runner
 data/long_context/long_context_retrieval_v1.json    # fixture
 data/long_context/haystacks/*.txt                   # PD/Apache-2.0 source text
-configs/experiments/spark-long-context.yaml         # experiment config
+configs/experiments/long-context.yaml         # experiment config
 tests/test_long_context.py                          # tests
 ```
 
@@ -398,9 +403,9 @@ tests/test_long_context.py                          # tests
 
 ```yaml
 experiment:
-  name: spark-long-context-shootout
-  description: Single-needle NIAH at 4k-128k on Spark-local models
-  platforms: [spark]
+  name: long-context-shootout
+  description: Single-needle NIAH at 4k-128k on locally-served models
+  platforms: [local]
   backend: ollama
   backend_version: local
   models: [qwen-3.6, gemma-4, nemotron-3]
@@ -435,7 +440,7 @@ above — several of these are now confirmed, not assumed):
 - `context_tokens_loaded` — the **actual** `prompt_eval_count` (confirmed
   reliable and stable). Drives the 1–2 iteration truncation correction.
 - `peak_memory_mb` during prefill — **NOT available via `nvidia-smi` on
-  Spark** (`memory.used` returns `[N/A]`; unified memory). Must come from
+  unified-memory hosts** (`memory.used` returns `[N/A]`). Must come from
   Ollama `/api/ps` (`size`/`size_vram`), `/proc/meminfo`, or
   `tegrastats`. This is the open telemetry item; it gates only the
   memory-growth chart, not the pass/fail heatmap.
@@ -506,7 +511,7 @@ Target ≥ 12:
       cells visually distinct.
 - [ ] `ModelConfig.base_model` field added (optional, back-compatible).
 - [ ] `tests/test_long_context.py` passes 100 %.
-- [ ] One published run on Spark (Qwen 3.6 or available 70B-class model)
+- [ ] One published run (Qwen 3.6 or available 70B-class model)
       as the reference artifact.
 
 ---
@@ -523,7 +528,7 @@ Target ≥ 12:
 
 ## Open questions deferred to implementation time
 
-- **Memory telemetry source on Spark.** `nvidia-smi` memory query is
+- **Memory telemetry source on unified-memory hosts.** `nvidia-smi` memory query is
   `[N/A]`. Decide between Ollama `/api/ps`, `/proc/meminfo`, and
   `tegrastats` (probe each at implementation time). Gates only the
   memory-growth chart.

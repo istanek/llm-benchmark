@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from spark_benchmark.code_generation import (
+from llm_benchmark.code_generation import (
     DEFAULT_TOLERANCE_PP,
     extract_code,
     load_code_generation_suite,
@@ -9,7 +9,7 @@ from spark_benchmark.code_generation import (
     sandbox_run,
     validate_reference_scores,
 )
-from spark_benchmark.reliability import load_reliability_suite
+from llm_benchmark.reliability import load_reliability_suite
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

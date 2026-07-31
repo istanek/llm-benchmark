@@ -1,12 +1,63 @@
 from pathlib import Path
 
-from spark_benchmark.sustained_throughput import (
+from llm_benchmark.sustained_throughput import (
     GenerationRecord,
     TelemetrySample,
+    TelemetrySampler,
     compute_derived_metrics,
     compute_windows,
     load_sustained_throughput_suite,
 )
+
+
+def test_telemetry_sampler_normalizes_portable_provider_snapshot() -> None:
+    class FakeAmdCollector:
+        source = "amd-smi"
+        capabilities = {"gpu_power_w", "gpu_temp_c", "gpu_memory_mb"}
+
+        def start(self) -> None:
+            return None
+
+        def stop(self) -> None:
+            return None
+
+        def snapshot(self) -> dict[str, object]:
+            return {
+                "source": "amd-smi",
+                "gpu_power_w": 123.5,
+                "gpu_temp_c": 67.0,
+                "gpu_memory_mb": 2048.0,
+            }
+
+    sampler = TelemetrySampler(collector=FakeAmdCollector())
+    sample = sampler._poll()
+
+    assert sampler.source == "amd-smi"
+    assert sample is not None
+    assert sample.gpu_power_w == 123.5
+    assert sample.gpu_temp_c == 67.0
+    assert sample.gpu_mem_used_mb == 2048.0
+
+
+def test_telemetry_sampler_preserves_system_power_without_claiming_gpu_power() -> None:
+    class FakeAppleCollector:
+        source = "powermetrics"
+        capabilities = {"system_power_w"}
+
+        def start(self) -> None:
+            return None
+
+        def stop(self) -> None:
+            return None
+
+        def snapshot(self) -> dict[str, object]:
+            return {"source": "powermetrics", "system_power_w": 35.0}
+
+    sample = TelemetrySampler(collector=FakeAppleCollector())._poll()
+
+    assert sample is not None
+    assert sample.system_power_w == 35.0
+    assert sample.gpu_power_w is None
 
 
 def _rec(seq: int, start: float, end: float, tokens: int) -> GenerationRecord:
@@ -85,6 +136,22 @@ def test_compute_derived_calculates_energy_when_power_samples_present() -> None:
     assert derived["peak_temp_c"] == 82.0
     # energy = avg_power(W) * duration(s) / tokens = 90 * 2 / 200 = 0.9 J/token
     assert derived["energy_j_per_token"] == 0.9
+
+
+def test_compute_derived_keeps_system_energy_separate_from_gpu_energy() -> None:
+    records = [_rec(0, 0.0, 1.0, 100), _rec(1, 1.0, 2.0, 100)]
+    windows = compute_windows(records, duration_s=2.0, window_s=1.0)
+    samples = [
+        TelemetrySample(timestamp_s=0.5, system_power_w=30.0),
+        TelemetrySample(timestamp_s=1.5, system_power_w=50.0),
+    ]
+
+    derived = compute_derived_metrics(records, windows, samples=samples, duration_s=2.0)
+
+    assert derived["avg_system_power_w"] == 40.0
+    assert derived["system_energy_j_per_token"] == 0.4
+    assert derived["gpu_energy_j_per_token"] is None
+    assert derived["power_scopes_observed"] == ["system"]
 
 
 def test_load_sustained_throughput_fixture_has_three_prompts() -> None:

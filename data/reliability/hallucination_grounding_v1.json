@@ -1,7 +1,7 @@
 {
   "name": "hallucination_grounding_v1",
   "category": "reliability",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Grounded-vs-hallucination reliability fixture. Models must answer strictly from the supplied context, abstain when evidence is missing, and reject false premises by citing the context.",
   "notes": [
     "Expanded demo fixture for v1 reliability reporting.",
@@ -14,7 +14,7 @@
       "context": "Atlas-3 was assembled in 2018 and launched into low Earth orbit in 2019. It was decommissioned in 2023.",
       "reference": "2019",
       "tags": ["grounded", "fact-lookup"],
-      "metadata": {"difficulty": "easy", "expected_behavior": "answer_from_context"}
+      "metadata": {"difficulty": "easy", "expected_behavior": "answer_from_context", "expected_values": ["2019"]}
     },
     {
       "task_id": "hg-v1-002-abstain-lead-engineer",
@@ -30,7 +30,7 @@
       "context": "Atlas-3 was assembled in 2018 and launched into low Earth orbit in 2019.",
       "reference": "No, the context states Atlas-3 was launched in 2019, not 2020.",
       "tags": ["contradiction", "grounded"],
-      "metadata": {"difficulty": "medium", "expected_behavior": "correct_user"}
+      "metadata": {"difficulty": "medium", "expected_behavior": "correct_user", "expected_values": ["2019"], "rejected_values": ["2020"]}
     },
     {
       "task_id": "hg-v1-004-grounded-answer-location",
@@ -38,7 +38,7 @@
       "context": "The Kappa battery plant is located in Ostrava. It opened its second assembly line in March 2024 and employs 420 people.",
       "reference": "Ostrava",
       "tags": ["grounded", "entity"],
-      "metadata": {"difficulty": "easy", "expected_behavior": "answer_from_context"}
+      "metadata": {"difficulty": "easy", "expected_behavior": "answer_from_context", "expected_values": ["Ostrava"]}
     },
     {
       "task_id": "hg-v1-005-abstain-plant-owner",
@@ -54,7 +54,7 @@
       "context": "The Kappa battery plant is located in Ostrava. It opened its second assembly line in March 2024 and employs 420 people.",
       "reference": "No, the context says the plant employs 420 people, not 520.",
       "tags": ["contradiction", "numeric-grounding"],
-      "metadata": {"difficulty": "medium", "expected_behavior": "correct_user"}
+      "metadata": {"difficulty": "medium", "expected_behavior": "correct_user", "expected_values": ["420"], "rejected_values": ["520"]}
     },
     {
       "task_id": "hg-v1-007-grounded-answer-version",
@@ -62,7 +62,7 @@
       "context": "In the April validation report, firmware 2.3.1 fixed the reboot issue on the Delta router, while version 2.3.0 still reproduced the crash after 40 minutes.",
       "reference": "2.3.1",
       "tags": ["grounded", "versioning"],
-      "metadata": {"difficulty": "easy", "expected_behavior": "answer_from_context"}
+      "metadata": {"difficulty": "easy", "expected_behavior": "answer_from_context", "expected_values": ["2.3.1"]}
     },
     {
       "task_id": "hg-v1-008-abstain-missing-author",
@@ -78,7 +78,7 @@
       "context": "In the April validation report, firmware 2.3.1 fixed the reboot issue on the Delta router, while version 2.3.0 still reproduced the crash after 40 minutes.",
       "reference": "No, the context says firmware 2.3.1 fixed the issue and 2.3.0 still crashed.",
       "tags": ["contradiction", "versioning"],
-      "metadata": {"difficulty": "medium", "expected_behavior": "correct_user"}
+      "metadata": {"difficulty": "medium", "expected_behavior": "correct_user", "expected_values": ["2.3.1"], "rejected_values": ["2.3.0"]}
     }
   ]
 }

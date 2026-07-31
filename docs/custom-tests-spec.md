@@ -7,10 +7,10 @@ Companion to `docs/architecture.md`, `docs/extensions-spec.md`,
 these models perform on **my** workload?", on top of the harness's
 existing model + backend + telemetry infrastructure.
 
-> **Scope.** The harness is **Spark-only**. Every example, default, and
+> **Scope.** The harness is **single-machine**. Every example, default, and
 > piece of advice in this document assumes you are running on an NVIDIA
-> DGX Spark with Ollama serving the models locally. Custom tests inherit
-> that scope — they exist to compare local model variants on Spark, not
+> one host with Ollama serving the models locally. Custom tests inherit
+> that scope — they exist to compare local model variants on one machine, not
 > to do any cross-platform marketing.
 
 ## Why this exists
@@ -34,9 +34,9 @@ pin to which workload".
 ## Two user journeys (collapsed into one CLI)
 
 The early proposal split this into two top-level CLI commands
-(`spark-bench quick` for "just show me the answers" and
-`spark-bench run-custom` for "score them against expectations"). We
-collapsed that to **one entrypoint** (`spark-bench run-custom`) with a
+(`llm-bench quick` for "just show me the answers" and
+`llm-bench run-custom` for "score them against expectations"). We
+collapsed that to **one entrypoint** (`llm-bench run-custom`) with a
 `mode:` field in the YAML so users only have to learn one command. The
 two journeys still exist, just under one roof:
 
@@ -103,19 +103,19 @@ tasks:
 
 ## CLI surface (v0.2.0)
 
-Two new commands, both backed by `spark_benchmark.custom_suites`:
+Two new commands, both backed by `llm_benchmark.custom_suites`:
 
 ```bash
 # Schema + soft validation. Exits non-zero on any error issue.
-spark-bench validate-custom path/to/suite.yaml \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark
+llm-bench validate-custom path/to/suite.yaml \
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local
 
 # End-to-end run. --allow-auto-detected is ON by default for custom
 # suites (the user explicitly opted into a non-canonical workload).
-spark-bench run-custom path/to/suite.yaml \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark \
+llm-bench run-custom path/to/suite.yaml \
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local \
   [--models qwen-3.6,phi4-14b] \
   [--no-allow-auto-detected] \
   [--no-resume] \
@@ -149,14 +149,14 @@ CLI:
 
 ```bash
 # Bare minimum — fan a prompt out to every chat-capable model in Ollama:
-spark-bench quick "Explain in Czech: what does 'házet hrách na zeď' mean?" \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark
+llm-bench quick "Explain in Czech: what does 'házet hrách na zeď' mean?" \
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local
 
 # Restrict to two models and persist the prompt as a reusable suite:
-spark-bench quick "Compare these two paragraphs..." \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark \
+llm-bench quick "Compare these two paragraphs..." \
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local \
   --models qwen-3.6,phi4-14b \
   --save --name compare-paragraphs
 ```
@@ -209,7 +209,7 @@ Manifest fields specific to the quick path:
 
 ## TUI surface (v0.2.1+)
 
-The curses TUI (`spark-bench shell`) gained a top-level **Custom**
+The curses TUI (`llm-bench shell`) gained a top-level **Custom**
 menu entry that mirrors `run-custom` for users who don't want to
 type out experiment + platform flags every time.
 
@@ -232,7 +232,7 @@ What it does:
 
 Manifests written by the TUI carry `source: shell` so reporting
 code can tell apart "user clicked Custom in the shell" from
-"user ran `spark-bench run-custom` on the CLI". Manual entry of an
+"user ran `llm-bench run-custom` on the CLI". Manual entry of an
 arbitrary suite path is intentionally not exposed in the TUI in
 0.2.1; the discovery list covers the common cases (shipped
 templates + suites the user has already run once).
@@ -319,7 +319,7 @@ What is **not** reused:
 - `suites.SuiteDefinition` — that's the canonical JSON-only schema with
   `expected_behavior` flags hard-wired into the reliability suite. The
   user-facing custom format lives in
-  `spark_benchmark.custom_suites.CustomSuiteDefinition` so canonical
+  `llm_benchmark.custom_suites.CustomSuiteDefinition` so canonical
   suites are not perturbed by user-driven schema changes.
 
 ## Roadmap beyond v0.2.0
@@ -366,7 +366,7 @@ Ollama judge model**. The judge runs against a separate
 `configs/models/<judge-name>.yaml` so the harness stays fully offline.
 Cloud judges (Claude / GPT) are explicitly **not** in v0.5.0; they would
 introduce credentials, rate limits, and cost tracking that aren't worth
-the complexity for a Spark-only project.
+the complexity for a single-machine project.
 
 Pairwise / preference / multi-judge agreement is research territory and
 is not on the v0.5.0 list either.
@@ -388,14 +388,14 @@ custom suites into the canonical tree.
 - **Multimodal custom tests** (image + text). Text-only across every
   phase above.
 - **Cross-platform comparisons.** v1 of this entire project is
-  Spark-only; custom suites do not change that.
+  single-machine; custom suites do not change that.
 
 ## Acceptance criteria for v0.2.0
 
 All of these must hold before `0.2.0` is tagged:
 
-- `spark-bench run-custom examples/custom-tests/quick/suite.yaml --experiment ... --platform spark` produces a non-empty `results.jsonl`, `summary.json`, `summary.md`, and `summary.html` under `results/custom/example-quick-test/<run-id>/`.
-- `spark-bench validate-custom <bad.yaml>` exits non-zero and prints a clear `ERROR ...` line for: duplicate task IDs, empty prompts, `mode: scored`, unknown `models[]`.
+- `llm-bench run-custom examples/custom-tests/quick/suite.yaml --experiment ... --platform local` produces a non-empty `results.jsonl`, `summary.json`, `summary.md`, and `summary.html` under `results/custom/example-quick-test/<run-id>/`.
+- `llm-bench validate-custom <bad.yaml>` exits non-zero and prints a clear `ERROR ...` line for: duplicate task IDs, empty prompts, `mode: scored`, unknown `models[]`.
 - The runner records errors as rows and keeps going (covered by `test_run_custom_suite_records_errors_without_aborting`).
 - Re-running against the same `--output-dir` skips already-completed pairs (covered by `test_run_custom_suite_resume_skips_already_done_pairs`).
 - A copy of the example template is committed under
