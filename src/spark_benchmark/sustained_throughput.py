@@ -43,6 +43,7 @@ DEFAULT_WARMUP_GENERATIONS = 1
 class TelemetrySample:
     timestamp_s: float
     gpu_power_w: float | None = None
+    system_power_w: float | None = None
     gpu_temp_c: float | None = None
     gpu_mem_used_mb: float | None = None
     gpu_clock_mhz: float | None = None
@@ -163,6 +164,7 @@ class TelemetrySampler:
         return TelemetrySample(
             timestamp_s=ts,
             gpu_power_w=number("gpu_power_w"),
+            system_power_w=number("system_power_w"),
             gpu_temp_c=number("gpu_temp_c"),
             gpu_mem_used_mb=number("gpu_memory_mb"),
             source=str(payload.get("source") or self._source),
@@ -324,15 +326,22 @@ def compute_derived_metrics(
                 break
 
     avg_power: float | None = None
+    avg_system_power: float | None = None
     if samples:
         powers = [s.gpu_power_w for s in samples if s.gpu_power_w is not None]
         if powers:
             avg_power = sum(powers) / len(powers)
+        system_powers = [s.system_power_w for s in samples if s.system_power_w is not None]
+        if system_powers:
+            avg_system_power = sum(system_powers) / len(system_powers)
 
     total_decode_tokens = sum(r.decode_tokens for r in records)
     energy_j_per_token: float | None = None
+    system_energy_j_per_token: float | None = None
     if avg_power is not None and total_decode_tokens > 0 and duration_s > 0:
         energy_j_per_token = round((avg_power * duration_s) / total_decode_tokens, 4)
+    if avg_system_power is not None and total_decode_tokens > 0 and duration_s > 0:
+        system_energy_j_per_token = round((avg_system_power * duration_s) / total_decode_tokens, 4)
 
     peak_temp: float | None = None
     if samples:
@@ -349,8 +358,15 @@ def compute_derived_metrics(
         "throttle_ratio": throttle_ratio,
         "time_to_throttle_s": round(time_to_throttle_s, 1) if time_to_throttle_s is not None else None,
         "avg_power_w": round(avg_power, 2) if avg_power is not None else None,
+        "avg_gpu_power_w": round(avg_power, 2) if avg_power is not None else None,
+        "avg_system_power_w": round(avg_system_power, 2) if avg_system_power is not None else None,
+        "power_scopes_observed": [
+            scope for scope, value in (("gpu", avg_power), ("system", avg_system_power)) if value is not None
+        ],
         "peak_temp_c": peak_temp,
         "energy_j_per_token": energy_j_per_token,
+        "gpu_energy_j_per_token": energy_j_per_token,
+        "system_energy_j_per_token": system_energy_j_per_token,
         "throttle_reasons_observed": throttle_reasons,
     }
 
@@ -490,6 +506,7 @@ def run_sustained_throughput_suite(
                         {
                             "timestamp_s": round(sample.timestamp_s, 3),
                             "gpu_power_w": sample.gpu_power_w,
+                            "system_power_w": sample.system_power_w,
                             "gpu_temp_c": sample.gpu_temp_c,
                             "gpu_mem_used_mb": sample.gpu_mem_used_mb,
                             "gpu_clock_mhz": sample.gpu_clock_mhz,
