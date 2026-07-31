@@ -3,14 +3,29 @@
 ================================================================================
 
 This is a tool for testing local language models on a single machine. If
-you have several large models installed
-locally (Qwen, Gemma, Nemotron, …) and you want to know which one is
-fastest, which one tells the truth more often, and which one writes the
-best Python code, this tool runs that comparison for you and writes a
-report.
+you have several large models installed locally (Qwen, Gemma, Nemotron, …)
+and you want to know which one is fastest, which one tells the truth more
+often, and which one writes the best Python code, this tool runs that
+comparison for you and writes a report.
 
-It does not call any cloud APIs. Everything runs against models you have
-already pulled to your machine through Ollama or llama.cpp.
+By default nothing leaves your machine: every request goes to models you
+have already pulled through Ollama or llama.cpp, or to a local
+OpenAI-compatible server. Nothing is sent anywhere unless you opt in.
+
+There are two ways to opt in, both off unless you configure them:
+
+  - Ollama Cloud — set OLLAMA_API_KEY (or use the TUI "Cloud" menu) and
+    you can benchmark cloud models such as gpt-oss:120b-cloud alongside
+    your local ones. Routing is per model, so local models still go to
+    localhost. See "Ollama Cloud" below.
+
+  - The openai-compatible backend — it talks to whatever endpoint you
+    configure. That is a local llama.cpp server by default, but nothing
+    stops you from pointing it at a remote one.
+
+Prompts and model outputs are sent to whichever endpoint you select. API
+keys are read from the environment only — they are never written to
+configs, manifests, or reports.
 
 
 --------------------------------------------------------------------------------
