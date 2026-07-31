@@ -14,6 +14,7 @@ class BackendKind(str, Enum):
     TRT_LLM = "trt-llm"
     VLLM = "vllm"
     OLLAMA = "ollama"
+    OPENAI_COMPATIBLE = "openai-compatible"
 
 
 class SamplingConfig(BaseModel):
