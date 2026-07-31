@@ -2,9 +2,10 @@
 
 Runs each model in a continuous-decode loop for a fixed wall-clock window
 (cycling several long prompts) and measures whether short-burst throughput
-holds up under sustained pressure. Background NVML / nvidia-smi sampling
-captures GPU temperature, power, and throttle reasons; if neither is
-available the suite still records token throughput from Ollama's own metrics.
+holds up under sustained pressure. A background sampler polls whichever
+telemetry collector fits the machine (see :mod:`llm_benchmark.telemetry`) for
+temperature, power and throttle reasons; with no collector available the suite
+still records token throughput from the backend's own metrics.
 
 See ``docs/extensions-spec.md`` for the methodology this implements.
 """
@@ -13,8 +14,6 @@ from __future__ import annotations
 
 import json
 import math
-import shutil
-import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
@@ -52,21 +51,13 @@ class TelemetrySample:
 
 
 class TelemetrySampler:
-    """Background poller for GPU stats.
+    """Background poller that turns collector snapshots into timed samples.
 
-    Detection order: pynvml → nvidia-smi → none. A missing GPU library is not
-    an error — we simply record fewer fields and the suite still produces a
-    throughput-only summary.
+    Vendor specifics live in :mod:`llm_benchmark.telemetry` — this class owns
+    only the thread, the cadence and the timestamped record. A machine with no
+    usable collector is not an error: fewer fields are recorded and the suite
+    still produces a throughput-only summary.
     """
-
-    NVML_THROTTLE_BITS = [
-        ("hw_slowdown", "nvmlClocksThrottleReasonHwSlowdown"),
-        ("hw_thermal_slowdown", "nvmlClocksThrottleReasonHwThermalSlowdown"),
-        ("hw_power_brake_slowdown", "nvmlClocksThrottleReasonHwPowerBrakeSlowdown"),
-        ("sw_thermal_slowdown", "nvmlClocksThrottleReasonSwThermalSlowdown"),
-        ("sw_power_cap", "nvmlClocksThrottleReasonSwPowerCap"),
-        ("sync_boost", "nvmlClocksThrottleReasonSyncBoost"),
-    ]
 
     def __init__(self, hz: float = DEFAULT_TELEMETRY_HZ, collector: Any | None = None) -> None:
         self.hz = max(hz, 0.1)
@@ -75,9 +66,7 @@ class TelemetrySampler:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._t0 = 0.0
-        self._pynvml: Any | None = None
-        self._nvml_handle: Any | None = None
-        self._portable_collector: Any | None = collector
+        self._collector: Any | None = collector
         self._source = self._detect_source()
 
     @property
@@ -85,31 +74,20 @@ class TelemetrySampler:
         return self._source
 
     def _detect_source(self) -> str:
-        if self._portable_collector is None:
+        if self._collector is None:
             candidate = build_telemetry_collector(discover_hardware())
             if getattr(candidate, "source", "none") != "none":
-                self._portable_collector = candidate
-        if self._portable_collector is not None:
-            return str(getattr(self._portable_collector, "source", "portable"))
-        try:
-            import pynvml  # type: ignore
-            pynvml.nvmlInit()
-            self._pynvml = pynvml
-            self._nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-            return "nvml"
-        except Exception:
-            self._pynvml = None
-            self._nvml_handle = None
-        if shutil.which("nvidia-smi"):
-            return "nvidia-smi"
+                self._collector = candidate
+        if self._collector is not None:
+            return str(getattr(self._collector, "source", "portable"))
         return "none"
 
     def start(self, t0: float) -> None:
         self._t0 = t0
         if self._source == "none":
             return
-        if self._portable_collector is not None:
-            self._portable_collector.start()
+        if self._collector is not None:
+            self._collector.start()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
@@ -117,13 +95,8 @@ class TelemetrySampler:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=2.0)
-        if self._portable_collector is not None:
-            self._portable_collector.stop()
-        if self._source == "nvml" and self._pynvml is not None:
-            try:
-                self._pynvml.nvmlShutdown()
-            except Exception:
-                pass
+        if self._collector is not None:
+            self._collector.stop()
 
     def _loop(self) -> None:
         next_t = time.monotonic()
@@ -138,16 +111,7 @@ class TelemetrySampler:
 
     def _poll(self) -> TelemetrySample | None:
         ts = time.monotonic() - self._t0
-        if self._portable_collector is not None:
-            return self._poll_portable(ts)
-        if self._source == "nvml":
-            return self._poll_nvml(ts)
-        if self._source == "nvidia-smi":
-            return self._poll_smi(ts)
-        return None
-
-    def _poll_portable(self, ts: float) -> TelemetrySample | None:
-        collector = self._portable_collector
+        collector = self._collector
         if collector is None:
             return None
         try:
@@ -161,90 +125,17 @@ class TelemetrySampler:
             value = payload.get(key)
             return float(value) if isinstance(value, (int, float)) else None
 
+        throttle = payload.get("throttle_reasons")
         return TelemetrySample(
             timestamp_s=ts,
             gpu_power_w=number("gpu_power_w"),
             system_power_w=number("system_power_w"),
             gpu_temp_c=number("gpu_temp_c"),
             gpu_mem_used_mb=number("gpu_memory_mb"),
+            gpu_clock_mhz=number("gpu_clock_mhz"),
+            throttle_reasons=[str(r) for r in throttle] if isinstance(throttle, list) else [],
             source=str(payload.get("source") or self._source),
         )
-
-    def _poll_nvml(self, ts: float) -> TelemetrySample | None:
-        pynvml = self._pynvml
-        handle = self._nvml_handle
-        if pynvml is None or handle is None:
-            return None
-        try:
-            power_w = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
-        except Exception:
-            power_w = None
-        try:
-            temp_c = float(pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU))
-        except Exception:
-            temp_c = None
-        mem_used: float | None = None
-        try:
-            mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            mem_used = mem.used / (1024 * 1024)
-        except Exception:
-            pass
-        clock_mhz: float | None = None
-        try:
-            clock_mhz = float(pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_GRAPHICS))
-        except Exception:
-            pass
-        throttle: list[str] = []
-        try:
-            flags = pynvml.nvmlDeviceGetCurrentClocksThrottleReasons(handle)
-            for label, attr in self.NVML_THROTTLE_BITS:
-                bit = getattr(pynvml, attr, 0)
-                if bit and (flags & bit):
-                    throttle.append(label)
-        except Exception:
-            pass
-        return TelemetrySample(
-            timestamp_s=ts,
-            gpu_power_w=power_w,
-            gpu_temp_c=temp_c,
-            gpu_mem_used_mb=mem_used,
-            gpu_clock_mhz=clock_mhz,
-            throttle_reasons=throttle,
-            source="nvml",
-        )
-
-    def _poll_smi(self, ts: float) -> TelemetrySample | None:
-        try:
-            cmd = [
-                "nvidia-smi",
-                "--query-gpu=power.draw,temperature.gpu,memory.used,clocks.gr",
-                "--format=csv,noheader,nounits",
-                "-i", "0",
-            ]
-            out = subprocess.run(cmd, capture_output=True, timeout=2.0, text=True)
-            if out.returncode != 0:
-                return None
-            parts = [p.strip() for p in out.stdout.strip().split(",")]
-            if len(parts) < 4:
-                return None
-            def _maybe_float(v: str) -> float | None:
-                if not v or v in {"[N/A]", "N/A"}:
-                    return None
-                try:
-                    return float(v)
-                except ValueError:
-                    return None
-            return TelemetrySample(
-                timestamp_s=ts,
-                gpu_power_w=_maybe_float(parts[0]),
-                gpu_temp_c=_maybe_float(parts[1]),
-                gpu_mem_used_mb=_maybe_float(parts[2]),
-                gpu_clock_mhz=_maybe_float(parts[3]),
-                source="nvidia-smi",
-            )
-        except Exception:
-            return None
-
 
 @dataclass
 class GenerationRecord:

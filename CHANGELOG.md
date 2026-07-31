@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **NVIDIA telemetry moved into the `telemetry` package.** NVML and
+  `nvidia-smi` polling lived inline in `sustained_throughput.TelemetrySampler`,
+  leaving NVIDIA as the one vendor that did not go through the collector
+  protocol the portable-core work introduced. It is now
+  `telemetry/nvidia.py::NvidiaTelemetryCollector`, selected by
+  `build_telemetry_collector` ahead of Apple and AMD (it is the only collector
+  reporting throttle reasons) and falling through to the stub when neither NVML
+  nor `nvidia-smi` is present. The sampler keeps only threading, cadence and
+  the timestamped sample; GPU clock and throttle reasons now travel through the
+  same snapshot dict as every other field. Verified on an NVIDIA GB10: power,
+  temperature and clock are captured, and `memory.used` stays absent rather
+  than being charted as 0 MB.
+
+### Added
+
+- **`code_generation` fixture holds the full HumanEval set** (0.1.0 → 0.2.0):
+  164 problems from openai/human-eval (MIT), up from the 5-problem starter
+  subset — the extension the fixture's own description called for. All 164
+  canonical solutions were executed through this repo's sandbox as a
+  conversion check (164/164 pass). At n = 5 a pass@1 carried a 95 % interval
+  spanning most of the scale; at n = 164 it is a publishable number.
+- **`--task-limit` / `task_limit=`** for the code suite, since a full run is
+  now 164 problems per model. A truncated run records `task_limit`,
+  `tasks_available` and `partial_run: true` in its summary, so a short smoke
+  check can never be mistaken for a full-set score. Verified against qwen-3.6
+  (`--task-limit 8` → 8/8 pass@1, `partial_run: true`).
+
 ## [0.6.0] - 2026-07-31
 
 ### Validated

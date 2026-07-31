@@ -511,6 +511,7 @@ def run_code_generation_suite(
     pass_at_1_overrides: dict[str, Any] | None = None,
     pass_at_k_overrides: dict[str, Any] | None = None,
     seeds: list[int] | None = None,
+    task_limit: int | None = None,
     reference_scores_path: Path | None = None,
     progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
@@ -527,6 +528,11 @@ def run_code_generation_suite(
         (default: temperature=0.8, top_p=0.95).
       seeds: list of seeds with length >= num_samples_per_task. Defaults to
         [42, 43, ...].
+      task_limit: run only the first N tasks. The fixture holds all 164
+        HumanEval problems, which is a long run against three models; this
+        keeps a smoke check short. A truncated run is recorded in the summary
+        as `task_limit` / `tasks_available` so its pass@1 is never mistaken
+        for a full-set score.
     """
     if num_samples_per_task < 1:
         raise ValueError("num_samples_per_task must be >= 1")
@@ -544,13 +550,17 @@ def run_code_generation_suite(
     per_model_outcomes: dict[str, list[TaskOutcome]] = {}
     total_samples = 0
 
-    total_tasks = len(suite.tasks)
+    tasks_available = len(suite.tasks)
+    if task_limit is not None and task_limit < 1:
+        raise ValueError("task_limit must be >= 1 when set")
+    selected_tasks = suite.tasks[:task_limit] if task_limit else suite.tasks
+    total_tasks = len(selected_tasks)
     for model_config in model_configs:
         if progress_callback:
             progress_callback(f"  loading {model_config.name} for code generation")
         backend.load_model(model_config)
         outcomes: list[TaskOutcome] = []
-        for idx, task in enumerate(suite.tasks, start=1):
+        for idx, task in enumerate(selected_tasks, start=1):
             if progress_callback:
                 progress_callback(
                     f"  {model_config.name} → coding task {idx}/{total_tasks} ({task.task_id})"
@@ -648,6 +658,9 @@ def run_code_generation_suite(
         "backend": backend_config.name.value,
         "total_samples": total_samples,
         "total_tasks": sum(len(o) for o in per_model_outcomes.values()),
+        "tasks_available": tasks_available,
+        "task_limit": task_limit,
+        "partial_run": bool(task_limit and task_limit < tasks_available),
         "models": model_summaries,
         "reference_warnings": [
             {

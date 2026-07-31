@@ -1,6 +1,8 @@
 from llm_benchmark.hardware import AcceleratorInfo, CpuInfo, HardwareInventory, MemoryInfo
+from llm_benchmark.sustained_throughput import TelemetrySampler
 from llm_benchmark.telemetry.amd import AmdSmiTelemetryCollector
 from llm_benchmark.telemetry.apple import ApplePowerMetricsCollector
+from llm_benchmark.telemetry.nvidia import NvidiaTelemetryCollector
 from llm_benchmark.telemetry.registry import build_telemetry_collector
 from llm_benchmark.telemetry.stub import StubTelemetryCollector
 
@@ -35,6 +37,69 @@ def test_unknown_hardware_uses_explicit_no_telemetry_collector() -> None:
 
     assert isinstance(collector, StubTelemetryCollector)
     assert collector.snapshot()["collector"] == "unavailable"
+
+
+def test_nvidia_hardware_selects_nvidia_collector(monkeypatch) -> None:
+    """NVIDIA is picked first — it is the only vendor reporting throttle reasons."""
+    monkeypatch.setattr(
+        NvidiaTelemetryCollector, "_detect", lambda self: "nvidia-smi", raising=True
+    )
+    collector = build_telemetry_collector(_hardware(os_family="linux", vendor="nvidia"))
+
+    assert isinstance(collector, NvidiaTelemetryCollector)
+    assert "throttle_reasons" in collector.capabilities
+
+
+def test_nvidia_without_tooling_falls_through_to_the_stub(monkeypatch) -> None:
+    monkeypatch.setattr(NvidiaTelemetryCollector, "_detect", lambda self: "none", raising=True)
+    collector = build_telemetry_collector(_hardware(os_family="linux", vendor="nvidia"))
+
+    assert isinstance(collector, StubTelemetryCollector)
+
+
+def test_nvidia_smi_row_treats_na_memory_as_missing_not_zero() -> None:
+    """Unified-memory parts report memory.used as [N/A]; 0 MB would be a lie."""
+    sample = NvidiaTelemetryCollector.parse_smi_row("75.02, 74, [N/A], 1980\n")
+
+    assert sample["gpu_power_w"] == 75.02
+    assert sample["gpu_temp_c"] == 74.0
+    assert sample["gpu_clock_mhz"] == 1980.0
+    assert "gpu_memory_mb" not in sample
+    assert sample["source"] == "nvidia-smi"
+
+
+def test_sampler_carries_clock_and_throttle_reasons_from_the_collector() -> None:
+    """Fields the NVML path used to fill in-line must survive the refactor."""
+
+    class FakeNvidiaCollector:
+        source = "nvml"
+        capabilities = {"gpu_power_w", "throttle_reasons"}
+
+        def start(self) -> None:
+            return None
+
+        def stop(self) -> None:
+            return None
+
+        def snapshot(self) -> dict:
+            return {
+                "collector": "nvidia",
+                "source": "nvml",
+                "gpu_power_w": 91.0,
+                "gpu_temp_c": 78.0,
+                "gpu_memory_mb": 30000.0,
+                "gpu_clock_mhz": 1500.0,
+                "throttle_reasons": ["sw_power_cap", "hw_thermal_slowdown"],
+            }
+
+    sampler = TelemetrySampler(collector=FakeNvidiaCollector())
+    sample = sampler._poll()
+
+    assert sampler.source == "nvml"
+    assert sample is not None
+    assert sample.gpu_clock_mhz == 1500.0
+    assert sample.throttle_reasons == ["sw_power_cap", "hw_thermal_slowdown"]
+    assert sample.gpu_mem_used_mb == 30000.0
 
 
 def test_amd_smi_collector_normalizes_json_metrics() -> None:

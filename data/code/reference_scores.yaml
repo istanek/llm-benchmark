@@ -6,11 +6,13 @@
 # IMPORTANT: every score should cite a source. Placeholder rows are clearly
 # marked and should not be treated as authoritative until updated.
 #
-# Scores are pass@1 in percent (0-100). The v1 fixture ships only 5 HumanEval
-# problems; until reference_scores have been updated with subset-specific
-# values OR the full 164-problem set is loaded, reference warnings are
-# expected to be noisy. Set `enforce: false` on a benchmark entry to suppress
-# the warning while keeping the comparison in reports.
+# Scores are pass@1 in percent (0-100). Since fixture 0.2.0 the suite ships the
+# full 164-problem HumanEval set, so a complete run is directly comparable to
+# published pass@1 figures — the subset caveat is gone. Two things still make a
+# comparison unfair, so keep `enforce: false` until they are addressed:
+#   1. every pass_at_1 below is still a TODO placeholder, and
+#   2. a run with --task-limit is marked `partial_run` in its summary and must
+#      not be compared against a full-set reference at all.
 
 tolerance_pp: 3.0
 

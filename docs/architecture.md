@@ -100,8 +100,8 @@ llm-benchmark/
 │   │   ├─ ollama.py            HTTP adapter (used by v1)
 │   │   ├─ llamacpp.py          subprocess adapter
 │   │   └─ stub.py              fallback
-│   └─ telemetry/               base / registry / stub (placeholder; real
-│                               telemetry lives in sustained_throughput.py)
+│   └─ telemetry/               nvidia / apple / amd / stub behind one
+│                               collector protocol + registry
 ├─ configs/
 │   ├─ experiments/*.yaml       what to run (backend + models + suites + sampling)
 │   ├─ platforms/*.yaml         where we're running (local.yaml)
@@ -111,7 +111,7 @@ llm-benchmark/
 │   ├─ performance/             openclaw_speed_v1.json, sustained_throughput_v1.json
 │   ├─ reliability/             hallucination_grounding_v1.json
 │   ├─ practical/               practical_structured_output_v1.json
-│   └─ code/                    code_generation_v1.json + reference_scores.yaml
+│   └─ code/                    code_generation_v1.json (164 HumanEval) + reference_scores.yaml
 ├─ results/                     Output artifacts (one run-id directory per run)
 ├─ suites/                      Reserved for future per-suite scratch
 ├─ tests/                       Plain-python tests (run with `python3 <file>`)
@@ -467,10 +467,18 @@ write `results.jsonl` row-by-row; finish with `summary.json` (+ optionally
 
 ### Telemetry
 
-- **`telemetry/{base,registry,stub}.py`** — interface placeholders. The real
-  GPU sampling currently lives inside `sustained_throughput.TelemetrySampler`;
-  the package-level telemetry registry is reserved for a future refactor that
-  promotes it into its own module.
+- **`telemetry/`** — every vendor lives here behind one collector protocol
+  (`start` / `stop` / `snapshot`):
+  - `nvidia.py` — NVML when the bindings import, else `nvidia-smi`; the only
+    collector reporting throttle reasons. `parse_smi_row` treats `[N/A]` as a
+    missing field, not zero, which is what unified-memory parts report for
+    `memory.used`.
+  - `apple.py` (`powermetrics`, system-scope power), `amd.py` (`amd-smi` /
+    `rocm-smi`), `stub.py` (explicit no-telemetry).
+  - `registry.build_telemetry_collector(hardware)` picks by vendor, NVIDIA
+    first, and falls through to the stub when a vendor's tooling is absent.
+  - `sustained_throughput.TelemetrySampler` now owns only the thread, the
+    cadence and the timestamped `TelemetrySample`.
 
 ## 4. Config and data layout
 

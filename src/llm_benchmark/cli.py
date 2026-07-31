@@ -366,6 +366,15 @@ def run(
     dry_run: bool = typer.Option(False, help="Only validate config and print resolved manifest."),
     smoke_prompt: str | None = typer.Option(None, help="Run a single generation smoke test against the first configured model."),
     run_suite: str | None = typer.Option(None, help="Run a built-in suite such as hallucination_grounding."),
+    task_limit: int | None = typer.Option(
+        None,
+        "--task-limit",
+        help=(
+            "code_generation only: run just the first N problems. The fixture "
+            "holds all 164 HumanEval problems; a truncated run is marked "
+            "partial_run in the summary."
+        ),
+    ),
     model: list[str] | None = typer.Option(
         None,
         "--model",
@@ -516,6 +525,7 @@ def run(
                 backend_config=backend_config,
                 model_configs=model_configs,
                 sampling=experiment_spec.sampling,
+                task_limit=task_limit,
                 reference_scores_path=default_reference_scores_path(repo_root),
             )
         elif run_suite in {"sustained_throughput", "sustained_throughput_v1"}:
