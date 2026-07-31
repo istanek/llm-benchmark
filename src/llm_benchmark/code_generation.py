@@ -27,6 +27,7 @@ from llm_benchmark.models import (
     GenerationResult,
     ModelConfig,
     SamplingConfig,
+    is_truncated,
 )
 from llm_benchmark.results_bundle import write_json, write_result
 from llm_benchmark.suites import SuiteDefinition, SuiteTask, load_suite_definition
@@ -57,6 +58,11 @@ class SampleOutcome:
     seed: int
     extracted_code: str
     sandbox: SandboxResult
+    # True when the model hit the token budget mid-code. Such a sample fails
+    # the sandbox with a SyntaxError, which _classify_failure would otherwise
+    # report as "compile_error" — i.e. as if the model had written broken code
+    # rather than having been cut off.
+    truncated: bool = False
 
 
 @dataclass
@@ -310,6 +316,7 @@ def evaluate_task(
                 seed=seed,
                 extracted_code=extracted,
                 sandbox=sandbox,
+                truncated=is_truncated(generation.finish_reason),
             )
         )
 
@@ -431,12 +438,16 @@ def _aggregate_per_model(outcomes: list[TaskOutcome]) -> dict[str, Any]:
     for outcome in outcomes:
         bucket = by_benchmark.setdefault(
             outcome.benchmark,
-            {"benchmark": outcome.benchmark, "tasks": 0, "pass_at_1_sum": 0.0, "pass_at_k_sum": 0.0, "pass_at_k_count": 0, "pass_at_k_k": None, "failed_task_ids": []},
+            {"benchmark": outcome.benchmark, "tasks": 0, "pass_at_1_sum": 0.0, "pass_at_k_sum": 0.0, "pass_at_k_count": 0, "pass_at_k_k": None, "failed_task_ids": [], "truncated_task_ids": []},
         )
         bucket["tasks"] += 1
         bucket["pass_at_1_sum"] += outcome.pass_at_1
         if outcome.pass_at_1 < 1.0:
             bucket["failed_task_ids"].append(outcome.task_id)
+            # A failure whose generation was cut off says nothing about whether
+            # the model can solve the problem — it says max_tokens was too low.
+            if any(sample.truncated for sample in outcome.samples):
+                bucket["truncated_task_ids"].append(outcome.task_id)
         if outcome.pass_at_k_value is not None:
             bucket["pass_at_k_sum"] += outcome.pass_at_k_value
             bucket["pass_at_k_count"] += 1
@@ -598,6 +609,7 @@ def run_code_generation_suite(
                     {
                         "sample_index": sample.sample_index,
                         "seed": sample.seed,
+                        "truncated": sample.truncated,
                         "extracted_code": sample.extracted_code,
                         "generation": gen.model_dump(mode="json"),
                         "sandbox": {

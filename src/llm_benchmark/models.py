@@ -101,6 +101,15 @@ class InferenceMetrics(BaseModel):
     quantization: str = ""
 
 
+# ``finish_reason`` values meaning the model hit the token budget rather than
+# finishing. Backends spell it differently, hence a set.
+TRUNCATION_FINISH_REASONS = {"length", "max_tokens", "truncated", "incomplete"}
+
+
+def is_truncated(finish_reason: str | None) -> bool:
+    return str(finish_reason or "").strip().lower() in TRUNCATION_FINISH_REASONS
+
+
 class GenerationResult(BaseModel):
     prompt: str
     output: str

@@ -5,7 +5,13 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
-from llm_benchmark.models import BackendConfig, GenerationResult, ModelConfig, SamplingConfig
+from llm_benchmark.models import (
+    BackendConfig,
+    GenerationResult,
+    ModelConfig,
+    SamplingConfig,
+    is_truncated,
+)
 from llm_benchmark.results_bundle import write_json, write_result
 from llm_benchmark.stats import wilson_interval
 from llm_benchmark.suites import SuiteDefinition, SuiteTask, load_suite_definition
@@ -72,10 +78,6 @@ NEGATION_PHRASES = (
 # free-text reference counts as reproduced. Only used as a fallback when the
 # fixture task carries no explicit ``expected_values`` contract.
 REFERENCE_COVERAGE_THRESHOLD = 0.6
-
-# ``finish_reason`` values that mean the model was cut off by the token budget
-# rather than finishing its answer.
-TRUNCATION_FINISH_REASONS = {"length", "max_tokens", "truncated"}
 
 # Per-suite output budgets. The grounding cap used to be 64 tokens, which cut
 # off models that emit a visible reasoning preamble before their answer and
@@ -189,10 +191,6 @@ def _expected_values_present(values: list[str], normalized_output: str) -> tuple
     """
     missing = [value for value in values if normalize_text(value) not in normalized_output]
     return (not missing), missing
-
-
-def is_truncated(finish_reason: str | None) -> bool:
-    return str(finish_reason or "").strip().lower() in TRUNCATION_FINISH_REASONS
 
 
 def score_hallucination_task(

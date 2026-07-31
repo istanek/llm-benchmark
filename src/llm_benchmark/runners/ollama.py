@@ -192,7 +192,12 @@ class OllamaAdapter:
         output = data.get("response", "")
         if not output:
             output = data.get("thinking", "")
-        finish_reason = "stop" if data.get("done") else "incomplete"
+        # Ollama reports *why* it stopped in done_reason ("stop" / "length").
+        # Collapsing that to "stop" made truncation invisible: a reply cut off
+        # by num_predict looked like a completed answer, so downstream
+        # truncation flags could never fire on this backend.
+        done_reason = str(data.get("done_reason") or "").strip()
+        finish_reason = done_reason or ("stop" if data.get("done") else "incomplete")
 
         prefill_tokens = int(data.get("prompt_eval_count") or 0)
         decode_tokens = int(data.get("eval_count") or 0)

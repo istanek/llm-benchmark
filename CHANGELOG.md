@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Ollama truncation was invisible.** `OllamaAdapter` mapped every completed
+  response to `finish_reason = "stop"`, discarding the `done_reason` Ollama
+  actually sends (`"length"` when the reply hit `num_predict`). The truncation
+  flags added in 0.6.0 therefore could never fire on the Ollama backend — the
+  grounding run reporting zero truncated rows was uninformative, not
+  reassuring. The adapter now passes `done_reason` through.
+- **Truncated code samples were reported as `compile_error`.** A generation cut
+  off mid-function fails the sandbox with a `SyntaxError`, which
+  `_classify_failure` filed as broken code rather than an exhausted token
+  budget. `SampleOutcome.truncated` is now recorded per sample, written to
+  `results.jsonl`, and collected as `truncated_task_ids` per benchmark, so
+  "the model cannot solve this" is distinguishable from "max_tokens was too
+  low". Found on the first full HumanEval run: both of qwen-3.6's two failures
+  in 164 problems are truncations at exactly 512 decode tokens, not wrong
+  answers.
+- `TRUNCATION_FINISH_REASONS` / `is_truncated` moved to `models.py` so the code
+  suite and the reliability suites share one definition; `"incomplete"` joins
+  the set.
+
 ### Added
 
 - **`scripts/run_full_code_generation.py`** — unattended runner for the full

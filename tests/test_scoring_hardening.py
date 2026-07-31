@@ -357,6 +357,83 @@ def test_wilson_margin_narrows_as_n_grows() -> None:
     assert wilson_margin(5, 10) > wilson_margin(50, 100) > wilson_margin(500, 1000)
 
 
+# --------------------------------------------------------------------- #
+# Truncation is observable end to end                                    #
+# --------------------------------------------------------------------- #
+
+
+def test_ollama_adapter_reports_length_stops_as_truncation(monkeypatch) -> None:
+    """Ollama sends done_reason="length"; collapsing it to "stop" hid truncation."""
+    import json as _json
+
+    from llm_benchmark.models import BackendConfig, BackendKind, is_truncated
+    from llm_benchmark.runners.ollama import OllamaAdapter
+
+    class _Response:
+        def read(self):
+            return _json.dumps(
+                {
+                    "response": "def f(",
+                    "done": True,
+                    "done_reason": "length",
+                    "prompt_eval_count": 10,
+                    "eval_count": 512,
+                }
+            ).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(
+        "llm_benchmark.runners.ollama.urllib.request.urlopen",
+        lambda request, timeout: _Response(),
+    )
+    adapter = OllamaAdapter(
+        BackendConfig(name=BackendKind.OLLAMA, entrypoint="http://localhost:11434", version="test")
+    )
+    adapter.load_model(_model_config())
+    result = adapter.generate("hi", SamplingConfig(max_tokens=512))
+
+    assert result.finish_reason == "length"
+    assert is_truncated(result.finish_reason) is True
+
+
+def test_code_generation_marks_truncated_samples() -> None:
+    """A cut-off generation must not be filed as the model writing broken code."""
+    from llm_benchmark.code_generation import evaluate_task
+
+    task = SuiteTask(
+        task_id="humaneval/x",
+        prompt="def add(a, b):\n",
+        metadata={
+            "benchmark": "humaneval",
+            "entry_point": "add",
+            "tests": "def check(candidate):\n    assert candidate(1, 2) == 3\n",
+        },
+    )
+    cut_off = GenerationResult(
+        prompt="p",
+        output="def add(a, b):\n    return a +",
+        finish_reason="length",
+        metrics=InferenceMetrics(decode_tokens=512),
+        raw={},
+    )
+    outcome = evaluate_task(
+        task,
+        generations=[cut_off],
+        sample_seeds=[42],
+        sandbox_timeout_s=10.0,
+        sandbox_memory_mb=512,
+    )
+
+    assert outcome.samples[0].truncated is True
+    assert outcome.samples[0].sandbox.passed is False
+    assert outcome.pass_at_1 == 0.0
+
+
 def _run_all() -> int:
     """Lightweight runner so tests work without pytest installed system-wide."""
     import inspect
