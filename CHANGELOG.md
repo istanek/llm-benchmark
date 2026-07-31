@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-31
+
+### Validated
+
+- **The hardened grounding scorer was checked against a real run** rather than
+  stub backends only (`results/benchmarks/20260731T205220Z-93efc960`:
+  qwen-3.6 / gemma-4 / nemotron-3 via Ollama, 9 tasks x 3 repetitions).
+  Re-scoring those outputs with the old implementation gives qwen-3.6 78 %,
+  gemma-4 67 %, nemotron-3 100 % — against 100 % for all three under the new
+  one. All 15 differences are abstentions the old phrase list missed
+  ("does not state" / "specify" / "provide"), and there are zero regressions
+  in the other direction. See METHODOLOGY.md for the full table.
+
+### Fixed
+
+- **`openai-compatible` decode throughput was understated.** The adapter
+  published the full request round trip as `decode_time_s`, and reporting
+  derives tok/s as `decode_tokens / decode_time_s` — so queueing, prefill and
+  network all counted as decode time. The adapter now **streams by default**
+  and measures time-to-first-token, making `decode_time_s` a real decode
+  window and `ttft_ms` a real measurement instead of an unavailable metric.
+  `options.stream: false` restores the single-shot path, which now declares
+  `decode_time_s: round_trip_only_includes_prefill_and_network` in its
+  capabilities rather than passing the round trip off as decode time.
+  Capabilities are selected per mode. Note: tok/s from the Laguna smoke run
+  (`20260731T170649Z`, 30.58 tok/s) was measured with the old accounting and
+  is a lower bound.
+- The same file was rewritten from single-line statements into the layout used
+  by the rest of the package.
+
 ### Changed
 
 - **Project renamed from `spark-benchmark` to `llm-benchmark`.** The harness is

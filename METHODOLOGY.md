@@ -92,6 +92,38 @@ Spark (128 GB unified memory, Ollama backend) in June 2026. Hardware is named
 where it changes how a number must be read, not as positioning — every
 finding is a model-to-model comparison on one host.
 
+### Scorer validation (v0.6.0, 2026-07-31)
+
+The v0.6.0 grounding scorer was validated by re-scoring one real run
+(`results/benchmarks/20260731T205220Z-93efc960`, qwen-3.6 / gemma-4 /
+nemotron-3 via Ollama, 9 tasks x 3 repetitions per model) with both the old
+and the new implementation:
+
+| Model | old scorer | new scorer |
+|---|---|---|
+| qwen-3.6 | 21/27 = 78 % | 27/27 = 100 % |
+| gemma-4 | 18/27 = 67 % | 27/27 = 100 % |
+| nemotron-3 | 27/27 = 100 % | 27/27 = 100 % |
+
+All 15 differences are `abstain` tasks that the old scorer failed because its
+phrase list did not contain the phrasings the models actually used — "does not
+state", "does not specify", "does not provide". There are **zero** cases where
+the old scorer passed and the new one failed, so the added strictness
+(abstention guard, hedged-guess guard, token-level negation) introduced no
+false negatives on this data.
+
+**This mattered for the headline.** The old scorer would have ranked
+nemotron-3 as the clearly most reliable model (100 % vs 67 % and 78 %) — a
+ranking produced entirely by gaps in a phrase list, not by model behaviour.
+All three models are in fact indistinguishable on this suite, and at n = 27
+the 95 % interval is 88-100 %, which cannot separate them anyway.
+
+Structured output found one genuine, reproducible failure: qwen-3.6 fails
+`pso-v1-006-simple-routing` in all three repetitions by emitting `notify` as a
+list where the schema requires a string. `consistency_rate` was 100 % for
+every model, i.e. Ollama at `temperature = 0` is deterministic across
+seed-varied repetitions.
+
 ### Long-context retrieval (v0.4.0 – v0.4.3, fast profile)
 
 Fast profile grid: lengths = 4 096 / 32 768 / 131 072 tokens,
