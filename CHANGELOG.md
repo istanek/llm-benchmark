@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`scripts/run_full_code_generation.py`** — unattended runner for the full
+  164-problem HumanEval set across several models. Each model writes into its
+  own run directory inside one bundle, so an interrupted session loses at most
+  the model in flight; re-running against the same `--output-dir` skips models
+  that already produced a `summary.json`. A failing model is logged and the
+  run continues rather than losing the night. Ends by rendering the bundle
+  report and printing measured pass@1 per model — it deliberately does not
+  write those into `reference_scores.yaml`, since checking a measurement
+  against itself would validate nothing.
+
 ### Changed
 
 - **NVIDIA telemetry moved into the `telemetry` package.** NVML and
