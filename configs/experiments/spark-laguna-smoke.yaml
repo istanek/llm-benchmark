@@ -1,0 +1,16 @@
+experiment:
+  name: spark-laguna-smoke
+  description: Smoke and portable-suite benchmark for local Laguna-S-2.1 via OpenAI-compatible API.
+  platforms: [spark]
+  backend: openai-compatible
+  backend_version: llama.cpp-laguna
+  models: [laguna-s-2.1-iq4-xs]
+  suites: [openclaw_speed]
+  sampling:
+    temperature: 0.0
+    top_p: 1.0
+    seed: 42
+    max_tokens: 128
+  context_lengths: [512, 4096, 16384, 65536]
+  repetitions: 1
+  warmup_runs: 0

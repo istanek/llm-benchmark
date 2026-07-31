@@ -1,0 +1,10 @@
+name: openai-compatible
+entrypoint: http://localhost:8888/v1
+version: llama.cpp-laguna
+transport: http
+options:
+  endpoint: http://localhost:8888/v1
+  request_timeout_s: 300
+notes:
+  - OpenAI-compatible non-streaming completions endpoint.
+  - Default target is the local Laguna-S-2.1 llama.cpp server.

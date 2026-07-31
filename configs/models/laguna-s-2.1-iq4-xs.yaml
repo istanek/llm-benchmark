@@ -1,0 +1,11 @@
+name: laguna-s-2.1-iq4-xs
+family: laguna
+base_model: laguna-s-2.1
+revision: Laguna-S-2.1
+quantization: IQ4_XS
+source: local-openai-compatible
+context_length: 65536
+artifact_path: Laguna-S-2.1
+notes:
+  - Local llama.cpp server alias on port 8888.
+  - Set LAGUNA_CTX=131072 before server start to benchmark 128k context.

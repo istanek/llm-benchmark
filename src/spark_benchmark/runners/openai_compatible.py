@@ -25,7 +25,7 @@ class OpenAICompatibleAdapter:
 
     def generate(self, prompt: str, params: SamplingConfig) -> GenerationResult:
         if self.model is None: raise RuntimeError("Model not loaded")
-        endpoint = self.config.entrypoint.rstrip("/")
+        endpoint = str(self.config.options.get("endpoint") or self.config.entrypoint).rstrip("/")
         if not endpoint.endswith("/completions"): endpoint += "/completions"
         payload = {"model": self.model.artifact_path or self.model.revision or self.model.name, "prompt": prompt, "max_tokens": params.max_tokens, "temperature": params.temperature, "top_p": params.top_p, "seed": params.seed, "stream": False}
         request = urllib.request.Request(endpoint, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
