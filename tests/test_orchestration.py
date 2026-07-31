@@ -1,4 +1,4 @@
-from spark_benchmark.orchestration import parse_benchmark_request
+from llm_benchmark.orchestration import parse_benchmark_request
 
 
 def test_parse_benchmark_request_defaults_to_all_models_and_core_suites() -> None:

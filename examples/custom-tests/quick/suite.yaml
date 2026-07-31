@@ -2,7 +2,7 @@ name: example-quick-test
 version: "0.1"
 description: |
   Tiny side-by-side comparison example. Drop your own prompts in here,
-  point `spark-bench run-custom` at this file, and you're benchmarking
+  point `llm-bench run-custom` at this file, and you're benchmarking
   whatever models you have in Ollama.
 
 # Mode A — pass-through, no scoring. Mode B ("scored") ships in v0.3.0.

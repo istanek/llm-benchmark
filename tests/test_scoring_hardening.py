@@ -1,0 +1,387 @@
+"""Regression tests for the 0.5.3 scoring / reporting hardening.
+
+Each test here pins one failure mode that the pre-0.5.3 heuristics scored
+wrongly, so a future rewrite of the scorers cannot quietly reintroduce it.
+"""
+
+from pathlib import Path
+
+from llm_benchmark.config import load_backend
+from llm_benchmark.models import GenerationResult, InferenceMetrics, ModelConfig, SamplingConfig
+from llm_benchmark.orchestration import load_openclaw_speed_suite, run_openclaw_speed_suite
+from llm_benchmark.reliability import (
+    build_summary,
+    contains_phrase,
+    load_reliability_suite,
+    run_hallucination_grounding_suite,
+    sampling_for_repetition,
+    score_hallucination_task,
+    score_structured_output_task,
+    tokenize,
+)
+from llm_benchmark.reporting import _is_performance_probe
+from llm_benchmark.stats import wilson_interval, wilson_margin
+from llm_benchmark.suites import SuiteTask
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _task(behavior: str, reference: str = "", **metadata) -> SuiteTask:
+    return SuiteTask(
+        task_id="t",
+        prompt="q",
+        context="c",
+        reference=reference,
+        metadata={"expected_behavior": behavior, **metadata},
+    )
+
+
+# --------------------------------------------------------------------- #
+# Token matching                                                        #
+# --------------------------------------------------------------------- #
+
+
+def test_contains_phrase_matches_whole_tokens_only() -> None:
+    tokens = tokenize("Nothing to note, cannot say, the north wing.")
+    assert contains_phrase("nothing", tokens) is True
+    # "no" lives inside "nothing"/"north" and "not" inside "cannot"/"note";
+    # substring matching used to treat all of these as negations.
+    assert contains_phrase("no", tokens) is False
+    assert contains_phrase("not", tokens) is False
+
+
+def test_contains_phrase_handles_contractions_and_multiword() -> None:
+    tokens = tokenize("I don't know, and the context does not mention it.")
+    assert contains_phrase("don't know", tokens) is True
+    assert contains_phrase("does not mention", tokens) is True
+
+
+# --------------------------------------------------------------------- #
+# correct_user                                                          #
+# --------------------------------------------------------------------- #
+
+
+def test_correct_user_rejects_incidental_negation_substring() -> None:
+    """"Nothing to note: 1998." is not a correction — it used to pass."""
+    task = _task("correct_user", "No, the context says 1998.", expected_values=["1998"])
+    result = score_hallucination_task(task, "Nothing to note: 1998.")
+    assert result["passed"] is False
+    assert result["reason"] == "missing_negation"
+
+
+def test_correct_user_rejects_sycophantic_agreement() -> None:
+    task = _task(
+        "correct_user",
+        "No, the context says 2019, not 2020.",
+        expected_values=["2019"],
+        rejected_values=["2020"],
+    )
+    result = score_hallucination_task(
+        task, "Yes, you are absolutely right, Atlas-3 launched in 2020 as you said."
+    )
+    assert result["passed"] is False
+    assert result["missing_expected_values"] == ["2019"]
+    assert result["rejected_values_present"] == ["2020"]
+
+
+def test_correct_user_accepts_real_correction() -> None:
+    task = _task(
+        "correct_user",
+        "No, the context says 2019, not 2020.",
+        expected_values=["2019"],
+        rejected_values=["2020"],
+    )
+    result = score_hallucination_task(task, "No, that is incorrect. The context says 2019.")
+    assert result["passed"] is True
+    assert result["reason"] == "negation_plus_corrected_value"
+
+
+# --------------------------------------------------------------------- #
+# answer_from_context                                                   #
+# --------------------------------------------------------------------- #
+
+
+def test_answer_from_context_rejects_abstention_that_quotes_the_value() -> None:
+    """A refusal echoing the reference token used to score as a correct answer."""
+    task = _task("answer_from_context", "1998", expected_values=["1998"])
+    result = score_hallucination_task(task, "The context does not mention 1998 anywhere.")
+    assert result["passed"] is False
+    assert result["reason"].startswith("abstained_instead_of_answering")
+
+
+def test_answer_from_context_accepts_grounded_answer() -> None:
+    task = _task("answer_from_context", "1998", expected_values=["1998"])
+    assert score_hallucination_task(task, "Atlas-3 was launched in 1998.")["passed"] is True
+
+
+def test_answer_from_context_falls_back_to_reference_coverage() -> None:
+    """Tasks without an explicit value contract still score."""
+    task = _task("answer_from_context", "the plant employs 420 people")
+    assert score_hallucination_task(task, "The plant employs 420 people.")["passed"] is True
+    assert score_hallucination_task(task, "Roughly a thousand staff work there.")["passed"] is False
+
+
+# --------------------------------------------------------------------- #
+# abstain                                                               #
+# --------------------------------------------------------------------- #
+
+
+def test_abstain_rejects_hedged_guess() -> None:
+    task = _task("abstain", "The context does not name the lead engineer.")
+    result = score_hallucination_task(
+        task, "The lead engineer is unknown to me, but it was likely Dr. Novak."
+    )
+    assert result["passed"] is False
+    assert result["reason"].startswith("hedged_guess_after_abstention")
+
+
+def test_abstain_accepts_phrasings_missing_from_the_old_list() -> None:
+    task = _task("abstain", "The context does not name the lead engineer.")
+    for output in (
+        "The context provides no information about the lead engineer.",
+        "That is not specified in the supplied context.",
+        "The context does not identify the author.",
+    ):
+        assert score_hallucination_task(task, output)["passed"] is True, output
+
+
+# --------------------------------------------------------------------- #
+# Truncation                                                            #
+# --------------------------------------------------------------------- #
+
+
+def test_truncated_failure_is_flagged() -> None:
+    task = _task("answer_from_context", "1998", expected_values=["1998"])
+    result = score_hallucination_task(task, "Let me think through the context step", "length")
+    assert result["passed"] is False
+    assert result["truncated"] is True
+    assert result["reason"].endswith("+truncated_output")
+
+
+def test_structured_output_flags_truncation() -> None:
+    task = SuiteTask(
+        task_id="t",
+        prompt="q",
+        reference='{"a": 1}',
+        metadata={"expected_behavior": "json_exact_match"},
+    )
+    result = score_structured_output_task(task, '{"a": 1', "length")
+    assert result["passed"] is False
+    assert result["truncated"] is True
+
+
+# --------------------------------------------------------------------- #
+# Fixture contract                                                      #
+# --------------------------------------------------------------------- #
+
+
+def test_grounding_fixture_declares_expected_values() -> None:
+    suite = load_reliability_suite(REPO_ROOT, "hallucination_grounding")
+    for task in suite.tasks:
+        behavior = task.metadata.get("expected_behavior")
+        if behavior in {"answer_from_context", "correct_user"}:
+            assert task.metadata.get("expected_values"), task.task_id
+        if behavior == "correct_user":
+            assert task.metadata.get("rejected_values"), task.task_id
+
+
+# --------------------------------------------------------------------- #
+# Repetitions / consistency                                             #
+# --------------------------------------------------------------------- #
+
+
+class _ScriptedBackend:
+    """Backend returning a canned output per call, recording sampling seeds."""
+
+    def __init__(self, outputs: list[str]) -> None:
+        self.outputs = outputs
+        self.calls = 0
+        self.seeds: list[int] = []
+
+    def load_model(self, model_config: ModelConfig) -> None:
+        self.model = model_config
+
+    def generate(self, prompt: str, params: SamplingConfig) -> GenerationResult:
+        output = self.outputs[self.calls % len(self.outputs)]
+        self.calls += 1
+        self.seeds.append(params.seed)
+        return GenerationResult(
+            prompt=prompt,
+            output=output,
+            finish_reason="stop",
+            metrics=InferenceMetrics(),
+            raw={},
+        )
+
+    def get_metrics(self) -> InferenceMetrics:
+        return InferenceMetrics()
+
+    def unload(self) -> None:
+        return None
+
+
+def _model_config() -> ModelConfig:
+    return ModelConfig(
+        name="fake-model",
+        family="fake",
+        revision="fake:1",
+        quantization="none",
+        source="test",
+        context_length=4096,
+        artifact_path="fake:1",
+    )
+
+
+def test_sampling_for_repetition_varies_seed() -> None:
+    sampling = SamplingConfig(seed=42)
+    assert sampling_for_repetition(sampling, 1).seed == 42
+    assert sampling_for_repetition(sampling, 3).seed == 44
+
+
+def test_repetitions_produce_one_row_per_repetition(tmp_path: Path) -> None:
+    suite = load_reliability_suite(REPO_ROOT, "hallucination_grounding")
+    backend_config = load_backend(REPO_ROOT / "configs" / "backends" / "ollama.yaml")
+    backend = _ScriptedBackend(["The context does not mention that."])
+    summary = run_hallucination_grounding_suite(
+        run_dir=tmp_path,
+        suite=suite,
+        backend=backend,
+        backend_config=backend_config,
+        model_configs=[_model_config()],
+        sampling=SamplingConfig(max_tokens=512),
+        repetitions=3,
+    )
+    assert backend.calls == len(suite.tasks) * 3
+    assert summary["repetitions"] == 3
+    assert summary["total_rows"] == len(suite.tasks) * 3
+    # Seeds must differ within a task, otherwise repeats measure nothing.
+    assert len(set(backend.seeds[:3])) == 3
+
+
+def test_grounding_uses_a_larger_token_budget_than_64(tmp_path: Path) -> None:
+    """The old 64-token cap truncated models that reason before answering."""
+    suite = load_reliability_suite(REPO_ROOT, "hallucination_grounding")
+    backend_config = load_backend(REPO_ROOT / "configs" / "backends" / "ollama.yaml")
+
+    seen: list[int] = []
+
+    class _Recorder(_ScriptedBackend):
+        def generate(self, prompt: str, params: SamplingConfig) -> GenerationResult:
+            seen.append(params.max_tokens)
+            return super().generate(prompt, params)
+
+    run_hallucination_grounding_suite(
+        run_dir=tmp_path,
+        suite=suite,
+        backend=_Recorder(["ok"]),
+        backend_config=backend_config,
+        model_configs=[_model_config()],
+        sampling=SamplingConfig(max_tokens=512),
+    )
+    assert seen and set(seen) == {256}
+
+
+def test_build_summary_reports_consistency_across_repetitions() -> None:
+    suite = load_reliability_suite(REPO_ROOT, "hallucination_grounding")
+    backend = load_backend(REPO_ROOT / "configs" / "backends" / "ollama.yaml")
+    rows = [
+        {"model": "m", "task_id": "t1", "evaluation": {"score": 1, "passed": True}},
+        {"model": "m", "task_id": "t1", "evaluation": {"score": 0, "passed": False}},
+        {"model": "m", "task_id": "t2", "evaluation": {"score": 1, "passed": True}},
+        {"model": "m", "task_id": "t2", "evaluation": {"score": 1, "passed": True}},
+    ]
+    summary = build_summary(rows, suite, backend)
+    model = summary["models"][0]
+    assert summary["repetitions"] == 2
+    assert model["tasks"] == 2
+    assert model["unstable_task_ids"] == ["t1"]
+    assert model["consistency_rate"] == 0.5
+    assert model["failed_task_ids"] == ["t1"]  # deduped across repetitions
+
+
+# --------------------------------------------------------------------- #
+# Performance probes                                                    #
+# --------------------------------------------------------------------- #
+
+
+def test_openclaw_speed_summary_is_tagged_as_performance_probe(tmp_path: Path) -> None:
+    suite = load_openclaw_speed_suite(REPO_ROOT)
+    backend_config = load_backend(REPO_ROOT / "configs" / "backends" / "ollama.yaml")
+    backend = _ScriptedBackend(["some text"])
+    summary = run_openclaw_speed_suite(
+        run_dir=tmp_path,
+        suite=suite,
+        backend=backend,
+        backend_config=backend_config,
+        model_configs=[_model_config()],
+        sampling=SamplingConfig(),
+        repetitions=2,
+        warmup_runs=1,
+    )
+    assert summary["scoring"] == "performance_probe"
+    # 1 discarded warmup + (3 tasks x 2 repetitions) recorded rows
+    assert backend.calls == 1 + len(suite.tasks) * 2
+    assert summary["total_rows"] == len(suite.tasks) * 2
+    assert _is_performance_probe({"suite": "openclaw_speed_v1", "scoring": "performance_probe"})
+
+
+def test_performance_probe_detected_for_legacy_runs_without_the_flag() -> None:
+    assert _is_performance_probe({"suite": "openclaw_speed_v1"}) is True
+    assert _is_performance_probe({"suite": "sustained_throughput_v1"}) is True
+    assert _is_performance_probe({"suite": "hallucination_grounding_v1"}) is False
+
+
+# --------------------------------------------------------------------- #
+# Wilson interval                                                       #
+# --------------------------------------------------------------------- #
+
+
+def test_wilson_interval_is_wide_for_small_n() -> None:
+    low, high = wilson_interval(6, 9)
+    assert 0.3 < low < 0.4
+    assert 0.85 < high < 0.92
+    # A 9-task suite cannot separate 6/9 from 7/9.
+    other_low, other_high = wilson_interval(7, 9)
+    assert other_low < high and low < other_high
+
+
+def test_wilson_interval_stays_in_range_at_the_extremes() -> None:
+    low, high = wilson_interval(9, 9)
+    assert low > 0.6 and high == 1.0
+    low_zero, high_zero = wilson_interval(0, 9)
+    assert low_zero == 0.0 and high_zero < 0.4
+    assert wilson_interval(0, 0) == (0.0, 1.0)
+
+
+def test_wilson_margin_narrows_as_n_grows() -> None:
+    assert wilson_margin(5, 10) > wilson_margin(50, 100) > wilson_margin(500, 1000)
+
+
+def _run_all() -> int:
+    """Lightweight runner so tests work without pytest installed system-wide."""
+    import inspect
+    import sys
+    import tempfile
+
+    failures: list[str] = []
+    module = sys.modules[__name__]
+    for name, fn in inspect.getmembers(module, inspect.isfunction):
+        if not name.startswith("test_"):
+            continue
+        try:
+            if "tmp_path" in inspect.signature(fn).parameters:
+                with tempfile.TemporaryDirectory() as tmp:
+                    fn(Path(tmp))
+            else:
+                fn()
+            print(f"ok  {name}")
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"{name}: {exc!r}")
+            print(f"FAIL {name}: {exc!r}")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(_run_all())

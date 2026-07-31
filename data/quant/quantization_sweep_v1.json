@@ -2,10 +2,10 @@
   "name": "quantization_sweep_v1",
   "category": "quant",
   "version": "0.5.0",
-  "description": "Reference quality thresholds per base model x quantization level for the DGX Spark v1 lineup.",
+  "description": "Reference quality thresholds per base model x quantization level for the v1 model lineup.",
   "notes": [
     "Quality thresholds come from the v0.4.x canonical runs (Ollama-default quantization).",
-    "Populate reference_pass_rates once the first full sweep run completes on Spark.",
+    "Populate reference_pass_rates once the first full sweep run completes on the target machine.",
     "enforce: false until baselines are confirmed on real hardware."
   ],
   "recommended_suites": [

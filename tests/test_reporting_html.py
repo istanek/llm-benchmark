@@ -1,4 +1,4 @@
-"""Tests for ``spark_benchmark.reporting_html``.
+"""Tests for ``llm_benchmark.reporting_html``.
 
 Coverage focus:
 
@@ -28,8 +28,8 @@ import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from spark_benchmark.reporting import write_report
-from spark_benchmark.reporting_html import (
+from llm_benchmark.reporting import write_report
+from llm_benchmark.reporting_html import (
     _band_for_pass_rate,
     _cell_pct_html,
     _code_gen_status_breakdown,
@@ -112,9 +112,9 @@ def _aggregate_minimal() -> dict:
         "runs": [
             {
                 "run_id": "run-001",
-                "experiment": "spark-default",
+                "experiment": "default",
                 "backend": "ollama",
-                "platform": "spark",
+                "platform": "local",
                 "suite": "openclaw_speed",
                 "suite_version": "1.0.0",
                 "row_count": 4,

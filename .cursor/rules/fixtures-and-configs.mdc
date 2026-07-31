@@ -8,7 +8,7 @@ alwaysApply: false
 
 ## Suite fixtures (`data/<category>/<name>_v<n>.json`)
 
-Validated through `SuiteDefinition` (see `src/spark_benchmark/suites.py`):
+Validated through `SuiteDefinition` (see `src/llm_benchmark/suites.py`):
 
 ```json
 {
@@ -48,7 +48,7 @@ so reference scores in `data/code/reference_scores.yaml` line up.
 
 - `experiments/*.yaml` — `experiment.backend` must match a `configs/backends/<name>.yaml`; every name in `experiment.models` must have a matching `configs/models/<name>.yaml`.
 - `models/*.yaml` — for `ollama` backend, `artifact_path` is the **Ollama tag** (e.g. `qwen3.6:35b`); for `llamacpp`, it's a path to a local **GGUF** file.
-- `platforms/spark.yaml` — only Spark in v1.
+- `platforms/local.yaml` — generic local target; hardware facts are auto-detected per run.
 - For Ollama-served models you can skip the YAML entirely; the TUI auto-detects them from `/api/tags` and synthesizes a `ModelConfig` (vision / embedding tags get greyed out, never benchmarked).
 
 When adding a new model: pin sampling and aliasing in the NL parser

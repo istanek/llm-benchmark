@@ -2,8 +2,8 @@ import json
 import tempfile
 from pathlib import Path
 
-from spark_benchmark.models import BackendConfig, BackendKind, ModelConfig
-from spark_benchmark.shell import (
+from llm_benchmark.models import BackendConfig, BackendKind, ModelConfig
+from llm_benchmark.shell import (
     SUITE_REGISTRY,
     CustomSuiteCandidate,
     DetectedOllamaModel,
@@ -245,7 +245,7 @@ def test_do_cloud_sets_api_key() -> None:
     import tempfile
     from unittest.mock import MagicMock, patch
 
-    from spark_benchmark.shell import TUIApp
+    from llm_benchmark.shell import TUIApp
 
     saved_key = os.environ.pop("OLLAMA_API_KEY", None)
     saved_host = os.environ.pop("OLLAMA_HOST", None)
@@ -256,7 +256,7 @@ def test_do_cloud_sets_api_key() -> None:
             stdscr = MagicMock()
             with patch("curses.endwin"):
                 with patch("builtins.input", return_value="sk-testkey123"):
-                    with patch("spark_benchmark.shell.load_default_context", return_value=ctx) as mock_load:
+                    with patch("llm_benchmark.shell.load_default_context", return_value=ctx) as mock_load:
                         app.do_cloud(stdscr)
             assert os.environ.get("OLLAMA_API_KEY") == "sk-testkey123"
             assert os.environ.get("OLLAMA_HOST") == "https://ollama.com"
@@ -276,7 +276,7 @@ def test_do_cloud_clears_key_on_dash() -> None:
     import tempfile
     from unittest.mock import MagicMock, patch
 
-    from spark_benchmark.shell import TUIApp
+    from llm_benchmark.shell import TUIApp
 
     saved_key = os.environ.get("OLLAMA_API_KEY")
     saved_host = os.environ.get("OLLAMA_HOST")
@@ -289,7 +289,7 @@ def test_do_cloud_clears_key_on_dash() -> None:
             stdscr = MagicMock()
             with patch("curses.endwin"):
                 with patch("builtins.input", return_value="-"):
-                    with patch("spark_benchmark.shell.load_default_context", return_value=ctx):
+                    with patch("llm_benchmark.shell.load_default_context", return_value=ctx):
                         app.do_cloud(stdscr)
             assert "OLLAMA_API_KEY" not in os.environ
             assert "OLLAMA_HOST" not in os.environ
@@ -310,7 +310,7 @@ def test_do_cloud_empty_input_keeps_existing_key() -> None:
     import tempfile
     from unittest.mock import MagicMock, patch
 
-    from spark_benchmark.shell import TUIApp
+    from llm_benchmark.shell import TUIApp
 
     saved = os.environ.get("OLLAMA_API_KEY")
     os.environ["OLLAMA_API_KEY"] = "existing-key"
@@ -321,7 +321,7 @@ def test_do_cloud_empty_input_keeps_existing_key() -> None:
             stdscr = MagicMock()
             with patch("curses.endwin"):
                 with patch("builtins.input", return_value=""):
-                    with patch("spark_benchmark.shell.load_default_context", return_value=ctx) as mock_load:
+                    with patch("llm_benchmark.shell.load_default_context", return_value=ctx) as mock_load:
                         app.do_cloud(stdscr)
             assert os.environ.get("OLLAMA_API_KEY") == "existing-key"
             mock_load.assert_not_called()

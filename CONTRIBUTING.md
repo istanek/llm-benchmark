@@ -15,8 +15,8 @@ keep it small as it grows.
 ## Local development
 
 ```bash
-git clone https://github.com/istanek/spark-benchmark.git
-cd spark-benchmark
+git clone https://github.com/istanek/llm-benchmark.git
+cd llm-benchmark
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 PYTHONPATH=src pytest tests/
@@ -31,8 +31,8 @@ PYTHONPATH=src python3 tests/test_reliability.py
 The CLI is wired up by the package install but also runnable raw:
 
 ```bash
-PYTHONPATH=src python3 -m spark_benchmark.cli wizard \
-  --experiment configs/experiments/spark-ollama-baseline.yaml --platform spark
+PYTHONPATH=src python3 -m llm_benchmark.cli wizard \
+  --experiment configs/experiments/ollama-baseline.yaml --platform local
 ```
 
 ## Code conventions

@@ -13,16 +13,16 @@ cp -r examples/custom-tests/quick my-czech-rag-test
 $EDITOR my-czech-rag-test/suite.yaml
 
 # 2. Validate before you run (catches typos, missing fields, unknown models)
-PYTHONPATH=src python3 -m spark_benchmark.cli validate-custom \
+PYTHONPATH=src python3 -m llm_benchmark.cli validate-custom \
   my-czech-rag-test/suite.yaml \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local
 
 # 3. Run it
-PYTHONPATH=src python3 -m spark_benchmark.cli run-custom \
+PYTHONPATH=src python3 -m llm_benchmark.cli run-custom \
   my-czech-rag-test/suite.yaml \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local
 ```
 
 The output is one bundle directory under `results/custom/<slug>/<run-id>/`
@@ -64,7 +64,7 @@ Pass `--no-resume` to start fresh.
 
 By default `run-custom` lets you reference any chat-capable Ollama tag
 even if it has no curated YAML — same `--allow-auto-detected` rules as
-`spark-bench wizard` and `spark-bench benchmark`. So
+`llm-bench wizard` and `llm-bench benchmark`. So
 `--models phi4-14b` works as long as `ollama pull phi4:14b` has run on
 the box.
 

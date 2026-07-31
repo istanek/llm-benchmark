@@ -3,4 +3,4 @@ entrypoint: tensorrt-llm
 version: TODO-pin
 transport: subprocess
 notes:
-  - Spark native high-performance backend
+  - NVIDIA high-performance backend

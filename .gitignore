@@ -49,7 +49,7 @@ results/benchmarks/
 results/custom/
 **/results.jsonl
 
-# Quick-run prompts persisted via `spark-bench quick --save` or the
+# Quick-run prompts persisted via `llm-bench quick --save` or the
 # TUI's Quick → "Save as suite?" affordance. Kept out of the repo so
 # personal one-shots don't end up under version control alongside the
 # shipped templates.

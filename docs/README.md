@@ -1,6 +1,6 @@
-# spark-benchmark
+# llm-benchmark
 
-[![CI](https://github.com/istanek/spark-benchmark/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/istanek/spark-benchmark/actions/workflows/ci.yml)
+[![CI](https://github.com/istanek/llm-benchmark/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/istanek/llm-benchmark/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../LICENSE)
 [![Python](https://img.shields.io/badge/python-%3E%3D3.11-blue.svg)](https://www.python.org/)
 
@@ -8,16 +8,16 @@
 > markdown copy lives under `docs/` so the project landing page on
 > GitHub renders the plain-text README instead.
 
-Reproducible local LLM benchmark harness for evaluating model behavior on NVIDIA DGX Spark.
+Reproducible benchmark harness for evaluating the behavior of locally-served LLMs.
 
 ## v1 focus
 
-Version 1 is intentionally Spark-only. The goal is to compare model variants on the same machine.
+Version 1 is intentionally single-machine. The goal is to compare model variants on the same host.
 
 Headline priorities for v1:
 
 - reliable, re-runnable experiment definitions from YAML
-- Spark-native backend coverage, starting with shared and native backends
+- Backend coverage, starting with shared and vendor-native backends
 - classical benchmark signals plus practical reliability and hallucination checks
 - public-ready raw outputs, methodology, and reports
 
@@ -30,15 +30,15 @@ Initial v1 lineup:
 ## Quick start
 
 ```bash
-cd ~/.openclaw/workspace/spark-benchmark
+cd ~/.openclaw/workspace/llm-benchmark
 pip install -e .
 
 # Easiest: launch the full TUI (no flags, picks defaults)
-spark-bench
+llm-bench
 
 # Or invoke a specific subcommand explicitly
-PYTHONPATH=src python3 -m spark_benchmark.cli wizard \
-  --experiment configs/experiments/spark-ollama-baseline.yaml --platform spark
+PYTHONPATH=src python3 -m llm_benchmark.cli wizard \
+  --experiment configs/experiments/ollama-baseline.yaml --platform local
 ```
 
 ### Ollama Cloud
@@ -50,7 +50,7 @@ to ollama.com in the same run.
 **Easiest: use the TUI Cloud menu**
 
 ```bash
-spark-bench          # open the full-screen menu
+llm-bench          # open the full-screen menu
 # → arrow to "Cloud" → Enter → paste your API key
 ```
 
@@ -65,13 +65,13 @@ export OLLAMA_HOST=https://ollama.com
 export OLLAMA_API_KEY=sk-...          # https://ollama.com/settings/keys
 
 # ad-hoc one-prompt comparison (run from the repo dir)
-spark-bench quick "Summarize the CAP theorem." \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark --models gpt-oss:120b-cloud
+llm-bench quick "Summarize the CAP theorem." \
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local --models gpt-oss:120b-cloud
 
 # a built-in suite against a specific cloud model (--model is repeatable)
-spark-bench run --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark --run-suite hallucination_grounding --model gpt-oss:120b-cloud
+llm-bench run --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local --run-suite hallucination_grounding --model gpt-oss:120b-cloud
 ```
 
 `OLLAMA_API_KEY` is read from the environment only (never persisted to
@@ -90,7 +90,7 @@ batch entrypoint and one bring-your-own-test entrypoint. They all
 resolve the same YAML experiment + platform + backend context, so they
 share models, suites, sampling, and reporting.
 
-### `spark-bench shell` — full curses TUI
+### `llm-bench shell` — full curses TUI
 
 Launches a full-screen menu (`Run / Custom / Quick / Models / Suites /
 Info / Chat / Refresh / Quit`) that lets you:
@@ -118,24 +118,24 @@ Info / Chat / Refresh / Quit`) that lets you:
   prompt on the regular TTY, fans the prompt out via the same
   `run_custom_suite_quick` runner, then asks "save this prompt as a
   reusable custom suite?" so the next time it appears in the
-  `Custom` discovery list. CLI mirror: `spark-bench quick "..."`;
+  `Custom` discovery list. CLI mirror: `llm-bench quick "..."`;
 - drop into the Chat panel to talk to a single picked model without
   leaving the TUI;
 - inspect suite metadata (description, task count, fixture path) before
   committing to a run.
 
-`spark-bench` with no subcommand defaults to `shell`. `Esc` / `q` cancels
+`llm-bench` with no subcommand defaults to `shell`. `Esc` / `q` cancels
 overlays, `Enter` confirms, `Space` toggles selections.
 
-### `spark-bench wizard` — multiselect picker → bundle run
+### `llm-bench wizard` — multiselect picker → bundle run
 
 A lighter alternative to the full TUI when you already know what you
 want. Curses overlay with arrow-key navigation:
 
 ```bash
-PYTHONPATH=src python3 -m spark_benchmark.cli wizard \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark \
+PYTHONPATH=src python3 -m llm_benchmark.cli wizard \
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local \
   --allow-auto-detected   # optional: also offer non-curated Ollama tags
 ```
 
@@ -158,20 +158,20 @@ relative to the reference variant, and speed/VRAM columns alongside. With
 `--allow-auto-detected` the picker shows every non-vision Ollama tag,
 flagged as `auto-detected`.
 
-### `spark-bench console` — single-model REPL
+### `llm-bench console` — single-model REPL
 
 One model, free-form prompts, until you type `/exit`:
 
 ```bash
-PYTHONPATH=src python3 -m spark_benchmark.cli console \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark \
+PYTHONPATH=src python3 -m llm_benchmark.cli console \
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local \
   --model gemma-4
 
 # Talk to any Ollama tag, even without a YAML config:
-PYTHONPATH=src python3 -m spark_benchmark.cli console \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark \
+PYTHONPATH=src python3 -m llm_benchmark.cli console \
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local \
   --allow-auto-detected --model phi4:14b
 ```
 
@@ -181,17 +181,17 @@ benchmark. `--model` accepts experiment names, raw Ollama tags, and the
 slugified form interchangeably. Omitting `--model` picks the first
 config in the resolved list (curated first, then auto-detected).
 
-### `spark-bench benchmark <natural-language request>` — NL batch
+### `llm-bench benchmark <natural-language request>` — NL batch
 
 Not interactive in the curses sense, but accepts a Czech / English
 sentence and routes it to a `BenchmarkPlan`:
 
 ```bash
-PYTHONPATH=src python3 -m spark_benchmark.cli benchmark \
+PYTHONPATH=src python3 -m llm_benchmark.cli benchmark \
   otestuj qwen gemma nemotron zamer se na rychlost spolehlivost \
   a openclaw structured output \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local
 ```
 
 Recognised keywords include `rychlost`/`speed`, `spolehliv`/`reliab`,
@@ -200,17 +200,17 @@ plus model aliases (`qwen` → `qwen-3.6`, `gemma` → `gemma-4`, `nemotron`
 → `nemotron-3`). Pass `--allow-auto-detected` to also route to any
 non-curated Ollama tag by its slugified name (`phi4:14b` → `phi4-14b`).
 
-### `spark-bench run-custom` — bring your own test
+### `llm-bench run-custom` — bring your own test
 
 Mode A custom suites: drop a YAML file with your prompts, point the CLI
 at it, and get a side-by-side comparison across whatever models you
 have in Ollama.
 
 ```bash
-PYTHONPATH=src python3 -m spark_benchmark.cli run-custom \
+PYTHONPATH=src python3 -m llm_benchmark.cli run-custom \
   examples/custom-tests/quick/suite.yaml \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local
 ```
 
 What you get under `results/custom/<slug>/<run-id>/`:
@@ -229,7 +229,7 @@ What you get under `results/custom/<slug>/<run-id>/`:
 
 `run-custom` defaults to `--allow-auto-detected` because the user
 explicitly opted in to a non-canonical workload. A bare
-`spark-bench validate-custom path/to/suite.yaml` checks the schema
+`llm-bench validate-custom path/to/suite.yaml` checks the schema
 without running anything (catches duplicate task IDs, empty prompts,
 unknown model references, the not-yet-implemented `mode: scored`).
 There is no scoring in v0.2.0 — `quick` mode is pass-through only. See
@@ -237,17 +237,17 @@ There is no scoring in v0.2.0 — `quick` mode is pass-through only. See
 that adds deterministic scorers, sandboxed custom-Python scorers, and
 a local LLM-as-judge.
 
-### `spark-bench quick` — one prompt, all models, no YAML
+### `llm-bench quick` — one prompt, all models, no YAML
 
 The lightest BYOT entry point. Type one prompt on the command line,
 get the same side-by-side `summary.md` / `summary.html` `run-custom`
 produces, no YAML required.
 
 ```bash
-PYTHONPATH=src python3 -m spark_benchmark.cli quick \
+PYTHONPATH=src python3 -m llm_benchmark.cli quick \
   "Explain the idiom 'throwing peas against a wall' and give a modern example." \
-  --experiment configs/experiments/spark-ollama-baseline.yaml \
-  --platform spark
+  --experiment configs/experiments/ollama-baseline.yaml \
+  --platform local
 ```
 
 Internally it builds a one-task `CustomSuiteDefinition` with
@@ -285,7 +285,7 @@ All four CLI surfaces share `model_registry.resolve_runnable_models`:
   manifest, report, and Markdown summary all flag the entries that
   weren't reviewed.
 
-The curses TUI (`spark-bench shell`) always behaves as if the flag were
+The curses TUI (`llm-bench shell`) always behaves as if the flag were
 on — the operator is in front of the screen and can see the
 `auto-detected` label. The same is true of the `Custom` menu entry,
 which mirrors `run-custom`'s default.
@@ -296,11 +296,11 @@ which mirrors `run-custom`'s default.
 - validated YAML config loading via Pydantic
 - CLI with run, aggregate, report, and dashboard commands
 - backend and telemetry base interfaces
-- Spark-only sample experiment, platform, backend, and model configs
-- first working reliability suite runner: `spark-bench run --experiment configs/experiments/spark-ollama-baseline.yaml --platform spark --run-suite hallucination_grounding` loads `data/reliability/hallucination_grounding_v1.json`, runs every task against every configured model, writes one row per (model, task) to `results.jsonl`, and emits `summary.json` + `summary.md` with per-model pass rates using simple heuristics for `answer_from_context`, `abstain`, and `correct_user`
+- Sample experiment, platform, backend, and model configs
+- first working reliability suite runner: `llm-bench run --experiment configs/experiments/ollama-baseline.yaml --platform local --run-suite hallucination_grounding` loads `data/reliability/hallucination_grounding_v1.json`, runs every task against every configured model, writes one row per (model, task) to `results.jsonl`, and emits `summary.json` + `summary.md` with per-model pass rates using simple heuristics for `answer_from_context`, `abstain`, and `correct_user`
 - code generation suite (`--run-suite code_generation`): canonical HumanEval-style problems with sandboxed execution (`subprocess` + `resource.setrlimit` + timeout) and pass@k unbiased estimator; reference-score validator at `data/code/reference_scores.yaml` emits warnings when results drift from published baselines. See [`extensions-spec.md`](extensions-spec.md) for the full long-context / sustained-throughput / code-generation extension plan
 - placeholder suite structure for quality, performance, reliability, and practical task checks
-- bring-your-own-test (BYOT) custom suites — `spark-bench run-custom` plus `spark-bench validate-custom`. v0.2.0 ships Mode A (pass-through, no scoring); see [`custom-tests-spec.md`](custom-tests-spec.md) for the roadmap.
+- bring-your-own-test (BYOT) custom suites — `llm-bench run-custom` plus `llm-bench validate-custom`. v0.2.0 ships Mode A (pass-through, no scoring); see [`custom-tests-spec.md`](custom-tests-spec.md) for the roadmap.
 
 ## Tests overview
 

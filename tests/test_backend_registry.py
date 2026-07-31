@@ -1,7 +1,7 @@
-from spark_benchmark.config import load_backend
-from spark_benchmark.models import BackendKind
-from spark_benchmark.runners.llamacpp import LlamaCppAdapter
-from spark_benchmark.runners.registry import build_backend
+from llm_benchmark.config import load_backend
+from llm_benchmark.models import BackendKind
+from llm_benchmark.runners.llamacpp import LlamaCppAdapter
+from llm_benchmark.runners.registry import build_backend
 
 
 def test_llamacpp_registry_returns_real_adapter() -> None:

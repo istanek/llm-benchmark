@@ -1,8 +1,8 @@
-from spark_benchmark.hardware import AcceleratorInfo, CpuInfo, HardwareInventory, MemoryInfo
-from spark_benchmark.telemetry.amd import AmdSmiTelemetryCollector
-from spark_benchmark.telemetry.apple import ApplePowerMetricsCollector
-from spark_benchmark.telemetry.registry import build_telemetry_collector
-from spark_benchmark.telemetry.stub import StubTelemetryCollector
+from llm_benchmark.hardware import AcceleratorInfo, CpuInfo, HardwareInventory, MemoryInfo
+from llm_benchmark.telemetry.amd import AmdSmiTelemetryCollector
+from llm_benchmark.telemetry.apple import ApplePowerMetricsCollector
+from llm_benchmark.telemetry.registry import build_telemetry_collector
+from llm_benchmark.telemetry.stub import StubTelemetryCollector
 
 
 def _hardware(*, os_family: str, vendor: str) -> HardwareInventory:

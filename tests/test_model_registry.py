@@ -1,7 +1,7 @@
 import os
 
-from spark_benchmark import model_registry
-from spark_benchmark.model_registry import (
+from llm_benchmark import model_registry
+from llm_benchmark.model_registry import (
     DetectedOllamaModel,
     classify_detected,
     find_config_by_name_or_tag,
@@ -12,8 +12,8 @@ from spark_benchmark.model_registry import (
     synthesize_cloud_model_config,
     synthesize_model_config,
 )
-from spark_benchmark.models import BackendConfig, BackendKind, ModelConfig
-from spark_benchmark.runners.ollama import (
+from llm_benchmark.models import BackendConfig, BackendKind, ModelConfig
+from llm_benchmark.runners.ollama import (
     is_cloud_endpoint,
     ollama_auth_headers,
     resolve_ollama_base,
@@ -329,7 +329,7 @@ def test_synthesize_cloud_model_config_fields() -> None:
 
 
 def test_model_is_cloud_detection() -> None:
-    from spark_benchmark.runners.ollama import model_is_cloud
+    from llm_benchmark.runners.ollama import model_is_cloud
 
     local = _make_model("qwen-3.6", "qwen3.6:35b")
     cloud_by_source = ModelConfig(
@@ -346,7 +346,7 @@ def test_model_is_cloud_detection() -> None:
 
 def test_adapter_routes_local_model_to_localhost_even_with_cloud_host() -> None:
     """A local model must hit localhost even when OLLAMA_HOST=ollama.com."""
-    from spark_benchmark.runners.ollama import OllamaAdapter
+    from llm_benchmark.runners.ollama import OllamaAdapter
 
     saved = _clear_ollama_env()
     try:
@@ -364,7 +364,7 @@ def test_adapter_routes_local_model_to_localhost_even_with_cloud_host() -> None:
 
 def test_adapter_routes_cloud_model_to_ollama_com() -> None:
     """A cloud model routes to ollama.com with the auth header."""
-    from spark_benchmark.runners.ollama import OllamaAdapter
+    from llm_benchmark.runners.ollama import OllamaAdapter
 
     saved = _clear_ollama_env()
     try:
@@ -384,7 +384,7 @@ def test_adapter_routes_cloud_model_to_ollama_com() -> None:
 
 def test_adapter_respects_private_remote_host_for_local_model() -> None:
     """A non-cloud custom OLLAMA_HOST is honoured for local models."""
-    from spark_benchmark.runners.ollama import OllamaAdapter
+    from llm_benchmark.runners.ollama import OllamaAdapter
 
     saved = _clear_ollama_env()
     try:

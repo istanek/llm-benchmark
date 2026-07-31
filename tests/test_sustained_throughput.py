@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from spark_benchmark.sustained_throughput import (
+from llm_benchmark.sustained_throughput import (
     GenerationRecord,
     TelemetrySample,
     TelemetrySampler,

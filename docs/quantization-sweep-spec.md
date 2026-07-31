@@ -5,8 +5,8 @@ Companion to `docs/architecture.md`, `docs/long-context-spec.md`,
 `METHODOLOGY.md`. This document is the implementation-ready plan for the
 `quantization_sweep` suite introduced in v0.5.0.
 
-> **Scope.** The harness is Spark-only. Every quantization variant tested
-> here runs locally on a DGX Spark via Ollama. No cross-platform comparison,
+> **Scope.** The harness is single-machine. Every quantization variant tested
+> here runs locally via Ollama. No cross-machine comparison,
 > no cloud calls for the base runs (Ollama Cloud models may appear as a
 > reference point but are labelled distinctly).
 
@@ -38,7 +38,7 @@ The output answers:
 2. **How much faster / smaller** is Q4_K_M compared to FP16?
 3. **At what quantization level does quality visibly degrade?**
 
-This is the most common practical question a Spark user faces when selecting a
+This is the most common practical question a user faces when selecting a
 model for a workflow.
 
 ---
@@ -185,9 +185,9 @@ This document defines that fixture schema below.
 
 ---
 
-## Experiment YAML: `configs/experiments/spark-quant-sweep.yaml`
+## Experiment YAML: `configs/experiments/quant-sweep.yaml`
 
-See `configs/experiments/spark-quant-sweep.yaml` (created alongside this doc).
+See `configs/experiments/quant-sweep.yaml` (created alongside this doc).
 
 ---
 
@@ -216,7 +216,7 @@ notes:
 
 ---
 
-## New code — `spark_benchmark.quant_sweep`
+## New code — `llm_benchmark.quant_sweep`
 
 A new module (≤ 150 lines) with two public functions:
 
@@ -250,12 +250,12 @@ bar charts for speed and VRAM.
 
 ## CLI surface
 
-No new CLI command. The existing `spark-bench run` and `spark-bench wizard`
+No new CLI command. The existing `llm-bench run` and `llm-bench wizard`
 surfaces work unchanged — the quant sweep is just another bundle in the
 canonical report. The `aggregate` command already forwards `run_dir` so the
 HTML renderer can pull the right suite summaries.
 
-Optional convenience: `spark-bench benchmark "otestuj qwen na rychlost a
+Optional convenience: `llm-bench benchmark "otestuj qwen na rychlost a
 kvalitu pro q4 q8 fp16"` routes to a `BenchmarkPlan` with all three quant
 variants selected (once model names are resolvable). Alias routing
 (`qwen-3.6-q4` → `qwen3-35b Q4_K_M`) does not require NL changes — the
@@ -267,10 +267,10 @@ existing `--allow-auto-detected` path handles it.
 
 1. Add `data/quant/quantization_sweep_v1.json` fixture (this document).
 2. Add model config YAML stubs for Q8 and Q4 variants of the v1 lineup.
-3. Add `configs/experiments/spark-quant-sweep.yaml`.
-4. Pull the quantization variants on Spark: `ollama pull qwen3.6:35b-q8_0` etc.
+3. Add `configs/experiments/quant-sweep.yaml`.
+4. Pull the quantization variants: `ollama pull qwen3.6:35b-q8_0` etc.
 5. Run one sweep, populate `reference_pass_rates` in the fixture.
-6. Implement `spark_benchmark.quant_sweep` (aggregate + regression check).
+6. Implement `llm_benchmark.quant_sweep` (aggregate + regression check).
 7. Wire `_render_quant_sweep_card` into the HTML report.
 8. Write tests (fixture loading + schema, aggregation grouping, regression
    check enforce=False/True, HTML card).

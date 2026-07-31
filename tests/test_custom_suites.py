@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from spark_benchmark.custom_suites import (
+from llm_benchmark.custom_suites import (
     CustomSuiteDefinition,
     CustomSuiteTask,
     ScoreResult,
@@ -18,7 +18,7 @@ from spark_benchmark.custom_suites import (
     slugify_suite_name,
     validate_custom_suite,
 )
-from spark_benchmark.models import (
+from llm_benchmark.models import (
     BackendConfig,
     BackendKind,
     GenerationResult,

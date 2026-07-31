@@ -1,6 +1,6 @@
-from spark_benchmark.models import BackendConfig, BackendKind
-from spark_benchmark.runners.ollama import OllamaAdapter
-from spark_benchmark.runtime import build_environment_snapshot
+from llm_benchmark.models import BackendConfig, BackendKind
+from llm_benchmark.runners.ollama import OllamaAdapter
+from llm_benchmark.runtime import build_environment_snapshot
 
 
 def test_environment_snapshot_records_a_portable_hardware_inventory() -> None:
@@ -23,7 +23,7 @@ def test_environment_snapshot_records_a_portable_hardware_inventory() -> None:
 
 
 def test_apple_silicon_is_detected_as_unified_memory_accelerator() -> None:
-    from spark_benchmark.hardware.inventory import _apple_accelerators
+    from llm_benchmark.hardware.inventory import _apple_accelerators
 
     devices = _apple_accelerators(os_family="darwin", architecture="arm64")
 
@@ -33,7 +33,7 @@ def test_apple_silicon_is_detected_as_unified_memory_accelerator() -> None:
 
 
 def test_amd_gpu_is_detected_from_linux_pci_inventory(monkeypatch) -> None:
-    from spark_benchmark.hardware import inventory
+    from llm_benchmark.hardware import inventory
 
     class Result:
         returncode = 0
@@ -48,7 +48,7 @@ def test_amd_gpu_is_detected_from_linux_pci_inventory(monkeypatch) -> None:
 
 
 def test_nvidia_device_with_unreported_memory_is_not_labeled_as_vram(monkeypatch) -> None:
-    from spark_benchmark.hardware import inventory
+    from llm_benchmark.hardware import inventory
 
     class Result:
         returncode = 0
@@ -82,7 +82,7 @@ def test_ollama_adapter_declares_normalization_capabilities() -> None:
 
 
 def test_every_builtin_backend_exposes_capabilities() -> None:
-    from spark_benchmark.runners.registry import build_backend
+    from llm_benchmark.runners.registry import build_backend
 
     for backend_kind in (BackendKind.OLLAMA, BackendKind.LLAMACPP, BackendKind.VLLM, BackendKind.TRT_LLM):
         adapter = build_backend(

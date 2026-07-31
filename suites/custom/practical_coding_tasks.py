@@ -1,4 +1,4 @@
-"""Placeholder suite for practical coding-task outcomes on Spark-local models.
+"""Placeholder suite for practical coding-task outcomes on locally-served models.
 
 Intended focus:
 - small real-world tasks with executable acceptance checks

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/release.sh — cut a spark-benchmark release
+# scripts/release.sh — cut a llm-benchmark release
 #
 # What it does:
 #   1. Validates the working tree is clean and we're on main (override with --branch).
@@ -164,8 +164,8 @@ fi
 
 SECTION_BODY="$(printf '%s\n' "$SECTION_BODY" | awk 'NF{found=1} found' | awk 'BEGIN{r=""} {r=r $0 "\n"} END{sub(/[[:space:]]+$/,"",r); print r}')"
 
-RELEASE_TITLE="${TAG} — spark-benchmark"
-TAG_MESSAGE="$(printf 'spark-benchmark %s\n\n%s\n' "$TAG" "$SECTION_BODY")"
+RELEASE_TITLE="${TAG} — llm-benchmark"
+TAG_MESSAGE="$(printf 'llm-benchmark %s\n\n%s\n' "$TAG" "$SECTION_BODY")"
 
 log "extracted CHANGELOG section ($(printf '%s' "$SECTION_BODY" | wc -l | tr -d ' ') lines)"
 

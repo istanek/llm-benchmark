@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "spark-benchmark"
+name = "llm-benchmark"
 version = "0.5.2"
-description = "Reproducible local LLM benchmark harness for NVIDIA DGX Spark"
+description = "Reproducible benchmark harness for locally-served LLMs"
 readme = {file = "docs/README.md", content-type = "text/markdown"}
 requires-python = ">=3.11"
 dependencies = [
@@ -19,9 +19,13 @@ dependencies = [
 dev = ["pytest>=8.2"]
 
 [project.scripts]
-spark-bench = "spark_benchmark.cli:app"
-spark_benchmark = "spark_benchmark.cli:shell_entrypoint"
-spark-benchmark = "spark_benchmark.cli:shell_entrypoint"
+llm-bench = "llm_benchmark.cli:app"
+llm_benchmark = "llm_benchmark.cli:shell_entrypoint"
+llm-benchmark = "llm_benchmark.cli:shell_entrypoint"
+# Deprecated pre-rename aliases, kept so existing scripts and shell history
+# keep working. Remove in 1.0.
+spark-bench = "llm_benchmark.cli:app"
+spark-benchmark = "llm_benchmark.cli:shell_entrypoint"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

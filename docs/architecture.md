@@ -1,4 +1,4 @@
-# spark-benchmark architecture
+# llm-benchmark architecture
 
 Companion to `README.txt` (plain-language overview) / `docs/README.md`
 (markdown version with badges) and `METHODOLOGY.md` (how we score). This
@@ -78,8 +78,8 @@ If you only read one diagram, read this one:
 ## 1. Layout
 
 ```
-spark-benchmark/
-├─ src/spark_benchmark/
+llm-benchmark/
+├─ src/llm_benchmark/
 │   ├─ cli.py                   Typer app, sub-commands, runtime context glue
 │   ├─ shell.py                 curses TUI shell (Run/Models/Suites/Chat/…)
 │   ├─ models.py                Pydantic data classes (configs + results)
@@ -104,7 +104,7 @@ spark-benchmark/
 │                               telemetry lives in sustained_throughput.py)
 ├─ configs/
 │   ├─ experiments/*.yaml       what to run (backend + models + suites + sampling)
-│   ├─ platforms/*.yaml         where we're running (spark.yaml)
+│   ├─ platforms/*.yaml         where we're running (local.yaml)
 │   ├─ backends/*.yaml          how we talk to inference (ollama, llamacpp, trt-llm)
 │   └─ models/*.yaml            per-model ModelConfig (name, tag, quant, ctx, …)
 ├─ data/                        Suite fixtures (input prompts + references)
@@ -124,7 +124,7 @@ spark-benchmark/
 A canonical "run a benchmark" path:
 
 1. **User invokes an entry point**
-   - CLI: `python3 -m spark_benchmark.cli wizard --experiment … --platform spark`
+   - CLI: `python3 -m llm_benchmark.cli wizard --experiment … --platform local`
    - TUI: `… cli console …` → `shell.py` curses loop.
 2. **Context load** (`cli.load_runtime_context` or `shell.load_default_context`)
    - Reads `configs/experiments/<name>.yaml` → `ExperimentSpec`.
@@ -177,7 +177,7 @@ A canonical "run a benchmark" path:
 
 ### Entry points
 
-- **`cli.py` (`spark-bench` Typer app)** — sub-commands:
+- **`cli.py` (`llm-bench` Typer app)** — sub-commands:
   - `run` — execute one suite directly against the configured experiment.
   - `console` — single-model REPL; `--model` accepts experiment name, raw
     Ollama tag, or slugified tag (resolved via
@@ -319,13 +319,32 @@ write `results.jsonl` row-by-row; finish with `summary.json` (+ optionally
 - **`reliability.py`** — `hallucination_grounding`,
   `practical_structured_output`. Scoring:
   - `score_hallucination_task` understands three `expected_behavior` flags:
-    `answer_from_context`, `abstain`, `correct_user`. Uses
-    `ABSTAIN_PHRASES`/`NEGATION_PHRASES` and a token-overlap heuristic.
+    `answer_from_context`, `abstain`, `correct_user`.
+  - **Phrase matching is token-based** (`tokenize` + `contains_phrase`), not
+    substring: `"no"` must not match inside *nothing* / *north* and `"not"`
+    must not match inside *cannot* / *note*. Substring matching made
+    `has_negation` true for almost any output, which collapsed `correct_user`
+    into a bare token-overlap check.
+  - **Value contract over guessing.** A fixture task should declare
+    `metadata.expected_values` (and `rejected_values` for `correct_user`);
+    the scorer requires every expected value to appear literally. Tasks
+    without the contract fall back to reproducing the reference either
+    literally or above `REFERENCE_COVERAGE_THRESHOLD` of its content tokens.
+  - **Guards**: an `answer_from_context` task fails if the output abstains
+    (even when it quotes the reference value); an `abstain` task fails if the
+    abstention is followed by a hedged guess (`HEDGED_GUESS_PHRASES`).
+  - Outputs cut off by the token budget are flagged (`evaluation.truncated`,
+    reason suffix `+truncated_output`) so a too-small budget is visible
+    instead of silently depressing a model's score.
   - `score_structured_output_task` requires `json_exact_match`; uses
     `extract_json_value` (handles ```json fences, trailing prose detection).
   - `build_summary` / `write_summary_markdown` are reused by the other
-    pass/fail-style suites (`openclaw_speed` calls `build_summary` even though
-    every row is a synthetic pass).
+    pass/fail-style suites. It also reports `consistency_rate` /
+    `unstable_task_ids` across repetitions and carries a `scoring` flag —
+    `openclaw_speed` passes `scoring="performance_probe"` so reporting does
+    not present its synthetic 100 % as a quality result.
+  - `sampling_for_repetition(sampling, n)` offsets the seed per repetition so
+    repeats measure something rather than being trivially identical.
 
 - **`code_generation.py`** — HumanEval-shaped:
   - `pass_at_k` unbiased estimator (`n`, `c`, `k`).
@@ -456,13 +475,13 @@ write `results.jsonl` row-by-row; finish with `summary.json` (+ optionally
 ## 4. Config and data layout
 
 ### Experiment YAML
-`configs/experiments/spark-ollama-baseline.yaml` (canonical example):
+`configs/experiments/ollama-baseline.yaml` (canonical example):
 
 ```yaml
 experiment:
-  name: spark-ollama-v1-baseline
+  name: ollama-v1-baseline
   description: ...
-  platforms: [spark]
+  platforms: [local]
   backend: ollama          # picks configs/backends/ollama.yaml
   backend_version: local
   models:                  # each name must have configs/models/<name>.yaml
@@ -507,13 +526,24 @@ Auto-detected models (no YAML present) get a synthesized `ModelConfig` with
   "version": "0.0.1",
   "tasks": [
     { "task_id": "...", "prompt": "...", "context": "...",
-      "reference": "...", "tags": [...], "metadata": {"expected_behavior": "..."}}
+      "reference": "...", "tags": [...],
+      "metadata": {"expected_behavior": "...",
+                   "expected_values": ["..."], "rejected_values": ["..."]}}
   ]
 }
 ```
 
 `metadata.expected_behavior` is the contract between fixtures and scorers
 (`answer_from_context`, `abstain`, `correct_user`, `json_exact_match`).
+
+`metadata.expected_values` / `rejected_values` (grounding suite, since fixture
+0.3.0) make that contract explicit: the values a correct answer must contain,
+and the false-premise values it must not simply echo back. Prefer them over
+relying on the free-text `reference` — a scorer inferring intent from prose is
+how "The context does not mention 1998" ended up scoring as a correct answer of
+*1998*. `rejected_values` are recorded in the evaluation
+(`rejected_values_present`) for diagnostics; the pass/fail gate is
+`expected_values` plus the behaviour-specific guard.
 
 ### Results directory shape
 

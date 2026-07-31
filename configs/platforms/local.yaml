@@ -1,0 +1,12 @@
+name: local
+display_name: Local machine
+architecture: auto-detected
+os: auto-detected
+telemetry:
+  - auto
+notes:
+  - Generic single-machine target; concrete CPU/GPU/memory facts are captured
+    per run by hardware.discover_hardware() into the manifest's environment
+    snapshot, so this file does not hard-code any vendor.
+  - Add a dedicated platform YAML only when a target needs settings that
+    auto-detection cannot supply.

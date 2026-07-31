@@ -1,11 +1,11 @@
 import json
 
-from spark_benchmark.models import BackendConfig, BackendKind, ModelConfig, SamplingConfig
-from spark_benchmark.runners.registry import build_backend
+from llm_benchmark.models import BackendConfig, BackendKind, ModelConfig, SamplingConfig
+from llm_benchmark.runners.registry import build_backend
 
 
 def test_openai_compatible_adapter_posts_completion_and_normalizes_usage(monkeypatch) -> None:
-    from spark_benchmark.runners.openai_compatible import OpenAICompatibleAdapter
+    from llm_benchmark.runners.openai_compatible import OpenAICompatibleAdapter
 
     captured = {}
 
@@ -20,7 +20,7 @@ def test_openai_compatible_adapter_posts_completion_and_normalizes_usage(monkeyp
         captured["payload"] = json.loads(request.data)
         return Response()
 
-    monkeypatch.setattr("spark_benchmark.runners.openai_compatible.urllib.request.urlopen", urlopen)
+    monkeypatch.setattr("llm_benchmark.runners.openai_compatible.urllib.request.urlopen", urlopen)
     adapter = OpenAICompatibleAdapter(BackendConfig(name=BackendKind.OPENAI_COMPATIBLE, entrypoint="http://localhost:8888/v1", version="test"))
     adapter.load_model(ModelConfig(name="laguna", family="laguna", revision="Laguna-S-2.1", quantization="iq4", source="local", context_length=131072, artifact_path="Laguna-S-2.1"))
     result = adapter.generate("hello", SamplingConfig(max_tokens=64, temperature=0.0, seed=42))

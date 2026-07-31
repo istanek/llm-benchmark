@@ -2,10 +2,10 @@
 
 ## Status
 
-Adopted for v1 in Spark-only form. v1 runs only against the DGX Spark configuration,
+Adopted for v1 in single-machine form. v1 runs only against one local configuration,
 consistent with the project's v1 scope (`README.txt` / `docs/README.md`, `METHODOLOGY.md`). Cross-platform
 framing is explicitly out of scope — see also `docs/custom-tests-spec.md` for the
-Spark-only "bring-your-own-test" subsystem.
+single-machine "bring-your-own-test" subsystem.
 
 Implementation order (smallest-to-largest payoff, easiest pipeline validation first):
 
@@ -13,7 +13,7 @@ Implementation order (smallest-to-largest payoff, easiest pipeline validation fi
    against published reference numbers.
 2. `sustained_throughput` — pure performance/telemetry, no quality scoring.
 3. `long_context_retrieval` — largest scope, most complex scoring, biggest payoff for the
-   Spark memory story.
+   unified-memory story.
 
 ## Suite 1: long_context_retrieval
 
@@ -27,7 +27,7 @@ Implementation order (smallest-to-largest payoff, easiest pipeline validation fi
 
 ### Purpose
 
-Quantify whether Spark's larger unified memory and bandwidth translate into a useful
+Quantify whether a larger unified memory and bandwidth translate into a useful
 long-context advantage in practice — both raw needle retrieval and multi-fact reasoning.
 
 ### Methodology
@@ -67,14 +67,14 @@ the suite. The N/A pattern is itself a useful platform/model result and must be 
 - Prefill time (s)
 - Prefill tokens/sec (derived)
 - TTFT (ms)
-- Peak memory during prefill (MB) — this is where Spark's 128 GB matters most
+- Peak memory during prefill (MB) — this is where a large unified memory matters most
 - Decode tokens/sec for the (short) answer
 - OOM events — log explicitly, never silently swallow
 
 ### Hypothesis (stated up front)
 
-- Spark wins cleanly at 64k+ on 70B-class quantized models due to memory headroom.
-- Prefill speed is bandwidth-bound; Spark's memory bandwidth should advantage it, but
+- Large-unified-memory hosts win cleanly at 64k+ on 70B-class quantized models due to memory headroom.
+- Prefill speed is bandwidth-bound; high memory bandwidth should help, but
   this is the most uncertain dimension and the most interesting to measure.
 - Smaller-memory configurations are expected to fail at long context with large models.
   Document the failure point rather than hiding it.
@@ -141,8 +141,8 @@ does not support batching, mark N/A; do not fake it with threading.
 
 #### Part C: Power profiles (v2)
 
-Cross-platform power-profile comparison deferred. For v1 Spark-only: document whether
-NVIDIA power management on Spark changes behavior across exposed profiles (research at
+Cross-machine power-profile comparison deferred. For v1: document whether
+vendor power management changes behavior across exposed profiles (research at
 implementation time).
 
 ### Prompts
@@ -166,7 +166,7 @@ Prompts are checked into the repo.
 - GPU/NPU temperature (°C)
 - Clock speeds (MHz) where exposed
 - Fan RPM where exposed
-- Throttle flags (NVML throttle reasons on Spark)
+- Throttle flags (NVML throttle reasons, NVIDIA hosts)
 
 ### Derived metrics per run
 
@@ -377,15 +377,15 @@ data/
 ├── needles/                       # NEW (suite 1)
 └── haystacks/                     # NEW (suite 1)
 
-src/spark_benchmark/
+src/llm_benchmark/
 ├── code_generation.py             # NEW: sandbox, scoring, pass@k, runner
 ├── long_context.py                # NEW (suite 1)
 └── sustained_throughput.py        # NEW (suite 2)
 
 configs/experiments/
-├── spark-code-generation.yaml     # NEW
-├── spark-long-context.yaml        # NEW
-└── spark-sustained.yaml           # NEW
+├── code-generation.yaml     # NEW
+├── long-context.yaml        # NEW
+└── sustained.yaml           # NEW
 ```
 
 ### CLI additions
@@ -393,29 +393,29 @@ configs/experiments/
 No new top-level commands. Each suite plugs into the existing `--run-suite` and
 `benchmark` paths.
 
-### Recommended experiment configs (Spark-only adaptation)
+### Recommended experiment configs (single-machine adaptation)
 
 ```yaml
-# configs/experiments/spark-code-generation.yaml
+# configs/experiments/code-generation.yaml
 experiment:
-  name: spark-code-generation-v1
-  platforms: [spark]
+  name: code-generation-v1
+  platforms: [local]
   models: [qwen-3.6, gemma-4, nemotron-3]
   suites: [code_generation]
   repetitions: 1
 
-# configs/experiments/spark-long-context.yaml
+# configs/experiments/long-context.yaml
 experiment:
-  name: spark-long-context-v1
-  platforms: [spark]
+  name: long-context-v1
+  platforms: [local]
   models: [qwen-3.6, gemma-4, nemotron-3]
   suites: [long_context_retrieval]
   repetitions: 3
 
-# configs/experiments/spark-sustained.yaml
+# configs/experiments/sustained.yaml
 experiment:
-  name: spark-sustained-v1
-  platforms: [spark]
+  name: sustained-v1
+  platforms: [local]
   models: [qwen-3.6, gemma-4, nemotron-3]
   suites: [sustained_throughput]
   repetitions: 3
@@ -439,4 +439,4 @@ experiment:
 - Code generation in languages other than Python — Python is the canonical reference.
 - Long-context generation (32k-token outputs) — different problem, not addressed here.
 - Inference-time adaptation (speculative decoding, draft models).
-- Cross-platform comparisons of any kind — v1 is Spark-only by design.
+- Cross-machine comparisons of any kind — v1 is single-machine by design.

@@ -1,9 +1,9 @@
 ================================================================================
-  spark-benchmark — what is this and how do I use it?
+  llm-benchmark — what is this and how do I use it?
 ================================================================================
 
-This is a tool for testing local language models on a single machine — an
-NVIDIA DGX Spark in particular. If you have several large models installed
+This is a tool for testing local language models on a single machine. If
+you have several large models installed
 locally (Qwen, Gemma, Nemotron, …) and you want to know which one is
 fastest, which one tells the truth more often, and which one writes the
 best Python code, this tool runs that comparison for you and writes a
@@ -37,8 +37,10 @@ model in turn, runs every test, and gives you a side-by-side table.
   What you need
 --------------------------------------------------------------------------------
 
-  - An NVIDIA DGX Spark (any Linux machine works for development, but
-    the throughput numbers are only meaningful on Spark in v1).
+  - A Linux or macOS machine with enough memory to hold the models you
+    want to compare. Throughput numbers are only comparable within one
+    machine — the harness compares models to each other, not machines to
+    each other.
 
   - Python 3.11 or newer.
 
@@ -63,7 +65,7 @@ model in turn, runs every test, and gives you a side-by-side table.
 
   The easiest way is through the full-screen menu:
 
-      spark-bench
+      llm-bench
         → arrow to "Cloud" → Enter
         → paste your API key (from https://ollama.com/settings/keys)
 
@@ -82,14 +84,14 @@ model in turn, runs every test, and gives you a side-by-side table.
 
       # ad-hoc: one prompt, compare against a cloud model
       # (run from the repo dir, or give --experiment an absolute path)
-      spark-bench quick "Summarize the CAP theorem." \
-                        --experiment configs/experiments/spark-ollama-baseline.yaml \
-                        --platform spark \
+      llm-bench quick "Summarize the CAP theorem." \
+                        --experiment configs/experiments/ollama-baseline.yaml \
+                        --platform local \
                         --models gpt-oss:120b-cloud
 
       # a built-in suite against a specific cloud model
-      spark-bench run --experiment configs/experiments/spark-ollama-baseline.yaml \
-                      --platform spark --run-suite hallucination_grounding \
+      llm-bench run --experiment configs/experiments/ollama-baseline.yaml \
+                      --platform local --run-suite hallucination_grounding \
                       --model gpt-oss:120b-cloud
 
   Valid --run-suite values: hallucination_grounding,
@@ -111,8 +113,8 @@ model in turn, runs every test, and gives you a side-by-side table.
   Install
 --------------------------------------------------------------------------------
 
-  git clone https://github.com/istanek/spark-benchmark.git
-  cd spark-benchmark
+  git clone https://github.com/istanek/llm-benchmark.git
+  cd llm-benchmark
   pip install -e .
 
 
@@ -127,7 +129,7 @@ work.
   Way 1 — full screen menu (recommended for first use)
   ----------------------------------------------------
 
-    spark-bench
+    llm-bench
 
   This opens a colourful full-screen menu. Use arrow keys to move, Enter
   to choose. The menu shows EVERY chat-capable model you have pulled in
@@ -156,8 +158,8 @@ work.
   Way 2 — interactive wizard
   --------------------------
 
-    spark-bench wizard --experiment configs/experiments/spark-ollama-baseline.yaml \
-                       --platform spark
+    llm-bench wizard --experiment configs/experiments/ollama-baseline.yaml \
+                       --platform local
 
   Same idea as Way 1 but lighter. Two questions:
     1. Which models do you want to test?     (pick with Space, Enter)
@@ -167,8 +169,8 @@ work.
   gemma-4, nemotron-3). Add --allow-auto-detected to also offer any
   other chat model you have pulled in Ollama:
 
-    spark-bench wizard --experiment configs/experiments/spark-ollama-baseline.yaml \
-                       --platform spark --allow-auto-detected
+    llm-bench wizard --experiment configs/experiments/ollama-baseline.yaml \
+                       --platform local --allow-auto-detected
 
   Then it runs everything and prints a summary at the end.
 
@@ -176,8 +178,8 @@ work.
   Way 3 — chat with a single model
   --------------------------------
 
-    spark-bench console --experiment configs/experiments/spark-ollama-baseline.yaml \
-                        --platform spark \
+    llm-bench console --experiment configs/experiments/ollama-baseline.yaml \
+                        --platform local \
                         --model gemma-4
 
   Opens a prompt loop. Type a question, press Enter, the model answers.
@@ -190,8 +192,8 @@ work.
   --allow-auto-detected to chat with any chat-capable Ollama tag, even
   one that has no YAML config:
 
-    spark-bench console --experiment configs/experiments/spark-ollama-baseline.yaml \
-                        --platform spark --allow-auto-detected \
+    llm-bench console --experiment configs/experiments/ollama-baseline.yaml \
+                        --platform local --allow-auto-detected \
                         --model phi4:14b
 
 
@@ -204,14 +206,14 @@ work.
 
     # 2. Validate before running (catches typos, missing fields,
     #    duplicate task IDs, unknown models). Free, takes < 1 second.
-    spark-bench validate-custom my-test/suite.yaml \
-                                --experiment configs/experiments/spark-ollama-baseline.yaml \
-                                --platform spark
+    llm-bench validate-custom my-test/suite.yaml \
+                                --experiment configs/experiments/ollama-baseline.yaml \
+                                --platform local
 
     # 3. Run it
-    spark-bench run-custom my-test/suite.yaml \
-                           --experiment configs/experiments/spark-ollama-baseline.yaml \
-                           --platform spark
+    llm-bench run-custom my-test/suite.yaml \
+                           --experiment configs/experiments/ollama-baseline.yaml \
+                           --platform local
 
   This is the path for "I have my own prompts and I want to see how
   the models I have actually do on them." Drop a YAML file like the
@@ -221,7 +223,7 @@ work.
 
   Don't want to type the flags? The full-screen menu (Way 1) has a
   "Custom" entry that walks you through the same flow:
-    spark-bench
+    llm-bench
       → arrow to "Custom" → Enter
       → pick a suite from the discovered list (your example
         templates + any suite you've already run once)
@@ -272,9 +274,9 @@ work.
   Way 5 — type one quick prompt, see all models reply
   ---------------------------------------------------
 
-    spark-bench quick "Explain what 'throwing peas against a wall' means." \
-                      --experiment configs/experiments/spark-ollama-baseline.yaml \
-                      --platform spark
+    llm-bench quick "Explain what 'throwing peas against a wall' means." \
+                      --experiment configs/experiments/ollama-baseline.yaml \
+                      --platform local
 
   This is "Way 4 but without the YAML." Use this when you have ONE
   thing you want to ask, and you want to see what every model on
@@ -285,9 +287,9 @@ work.
   Ollama reports (curated lineup + auto-detected). Restrict the
   lineup with --models like everywhere else:
 
-    spark-bench quick "Compare these two paragraphs..." \
-                      --experiment configs/experiments/spark-ollama-baseline.yaml \
-                      --platform spark \
+    llm-bench quick "Compare these two paragraphs..." \
+                      --experiment configs/experiments/ollama-baseline.yaml \
+                      --platform local \
                       --models qwen-3.6,phi4-14b
 
   Want to keep the prompt for next time? Add --save and the harness
@@ -298,14 +300,14 @@ work.
   it walks the same examples/custom-tests tree. You can rename it
   with --name:
 
-    spark-bench quick "Rate this code review snippet 1-5..." \
-                      --experiment configs/experiments/spark-ollama-baseline.yaml \
-                      --platform spark \
+    llm-bench quick "Rate this code review snippet 1-5..." \
+                      --experiment configs/experiments/ollama-baseline.yaml \
+                      --platform local \
                       --save --name code-review-rating
 
   In the full-screen menu (Way 1) the Quick entry walks you through
   the same flow interactively:
-    spark-bench
+    llm-bench
       → arrow to "Quick" → Enter
       → tick the models
       → type the prompt on the line you're given (single line)
@@ -324,9 +326,9 @@ work.
   Way 6 — describe what you want in a sentence
   --------------------------------------------
 
-    spark-bench benchmark otestuj qwen a gemma na rychlost a spolehlivost \
-                          --experiment configs/experiments/spark-ollama-baseline.yaml \
-                          --platform spark
+    llm-bench benchmark otestuj qwen a gemma na rychlost a spolehlivost \
+                          --experiment configs/experiments/ollama-baseline.yaml \
+                          --platform local
 
   The tool understands a few Czech and English keywords and routes the
   request to the right test suites. Keywords it recognises:
@@ -469,7 +471,7 @@ the HTML report.
 
   Step 2 — run the sweep experiment:
 
-      spark-bench --experiment configs/experiments/spark-quant-sweep.yaml
+      llm-bench --experiment configs/experiments/quant-sweep.yaml
 
   The TUI will show all three variants of each model in the picker.
   Select the ones you have pulled and run any combination of suites.
@@ -549,7 +551,7 @@ the HTML report.
 --------------------------------------------------------------------------------
 
 Open an issue on GitHub:
-    https://github.com/istanek/spark-benchmark/issues
+    https://github.com/istanek/llm-benchmark/issues
 
 Or send a pull request — see CONTRIBUTING.md for the workflow.
 
