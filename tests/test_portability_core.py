@@ -22,6 +22,31 @@ def test_environment_snapshot_records_a_portable_hardware_inventory() -> None:
     assert hardware.accelerators == [] or hardware.accelerators[0].kind in {"gpu", "npu"}
 
 
+def test_apple_silicon_is_detected_as_unified_memory_accelerator() -> None:
+    from spark_benchmark.hardware.inventory import _apple_accelerators
+
+    devices = _apple_accelerators(os_family="darwin", architecture="arm64")
+
+    assert len(devices) == 1
+    assert devices[0].vendor == "apple"
+    assert devices[0].memory_kind == "unified"
+
+
+def test_amd_gpu_is_detected_from_linux_pci_inventory(monkeypatch) -> None:
+    from spark_benchmark.hardware import inventory
+
+    class Result:
+        returncode = 0
+        stdout = "03:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Navi 31 [Radeon RX 7900 XTX]\n"
+
+    monkeypatch.setattr(inventory.subprocess, "run", lambda *args, **kwargs: Result())
+    devices = inventory._amd_accelerators(os_family="linux")
+
+    assert devices[0].vendor == "amd"
+    assert devices[0].model == "Navi 31 [Radeon RX 7900 XTX]"
+    assert devices[0].memory_kind == "unknown"
+
+
 def test_nvidia_device_with_unreported_memory_is_not_labeled_as_vram(monkeypatch) -> None:
     from spark_benchmark.hardware import inventory
 

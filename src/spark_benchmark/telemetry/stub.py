@@ -4,8 +4,11 @@ import time
 
 
 class StubTelemetryCollector:
-    def __init__(self, name: str) -> None:
+    source = "none"
+
+    def __init__(self, name: str = "unavailable") -> None:
         self.name = name
+        self.capabilities: set[str] = set()
         self.started_at: float | None = None
 
     def start(self) -> None:

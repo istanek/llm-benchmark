@@ -3,10 +3,40 @@ from pathlib import Path
 from spark_benchmark.sustained_throughput import (
     GenerationRecord,
     TelemetrySample,
+    TelemetrySampler,
     compute_derived_metrics,
     compute_windows,
     load_sustained_throughput_suite,
 )
+
+
+def test_telemetry_sampler_normalizes_portable_provider_snapshot() -> None:
+    class FakeAmdCollector:
+        source = "amd-smi"
+        capabilities = {"gpu_power_w", "gpu_temp_c", "gpu_memory_mb"}
+
+        def start(self) -> None:
+            return None
+
+        def stop(self) -> None:
+            return None
+
+        def snapshot(self) -> dict[str, object]:
+            return {
+                "source": "amd-smi",
+                "gpu_power_w": 123.5,
+                "gpu_temp_c": 67.0,
+                "gpu_memory_mb": 2048.0,
+            }
+
+    sampler = TelemetrySampler(collector=FakeAmdCollector())
+    sample = sampler._poll()
+
+    assert sampler.source == "amd-smi"
+    assert sample is not None
+    assert sample.gpu_power_w == 123.5
+    assert sample.gpu_temp_c == 67.0
+    assert sample.gpu_mem_used_mb == 2048.0
 
 
 def _rec(seq: int, start: float, end: float, tokens: int) -> GenerationRecord:

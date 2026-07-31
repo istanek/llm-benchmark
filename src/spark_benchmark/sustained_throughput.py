@@ -28,7 +28,9 @@ from spark_benchmark.models import (
     SamplingConfig,
 )
 from spark_benchmark.results_bundle import write_json, write_result
+from spark_benchmark.hardware import discover_hardware
 from spark_benchmark.suites import SuiteDefinition, load_suite_definition
+from spark_benchmark.telemetry.registry import build_telemetry_collector
 
 
 DEFAULT_DURATION_S = 300.0      # 5 minutes per model
@@ -65,7 +67,7 @@ class TelemetrySampler:
         ("sync_boost", "nvmlClocksThrottleReasonSyncBoost"),
     ]
 
-    def __init__(self, hz: float = DEFAULT_TELEMETRY_HZ) -> None:
+    def __init__(self, hz: float = DEFAULT_TELEMETRY_HZ, collector: Any | None = None) -> None:
         self.hz = max(hz, 0.1)
         self.interval = 1.0 / self.hz
         self.samples: list[TelemetrySample] = []
@@ -74,6 +76,7 @@ class TelemetrySampler:
         self._t0 = 0.0
         self._pynvml: Any | None = None
         self._nvml_handle: Any | None = None
+        self._portable_collector: Any | None = collector
         self._source = self._detect_source()
 
     @property
@@ -81,6 +84,12 @@ class TelemetrySampler:
         return self._source
 
     def _detect_source(self) -> str:
+        if self._portable_collector is None:
+            candidate = build_telemetry_collector(discover_hardware())
+            if getattr(candidate, "source", "none") != "none":
+                self._portable_collector = candidate
+        if self._portable_collector is not None:
+            return str(getattr(self._portable_collector, "source", "portable"))
         try:
             import pynvml  # type: ignore
             pynvml.nvmlInit()
@@ -98,6 +107,8 @@ class TelemetrySampler:
         self._t0 = t0
         if self._source == "none":
             return
+        if self._portable_collector is not None:
+            self._portable_collector.start()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
@@ -105,6 +116,8 @@ class TelemetrySampler:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=2.0)
+        if self._portable_collector is not None:
+            self._portable_collector.stop()
         if self._source == "nvml" and self._pynvml is not None:
             try:
                 self._pynvml.nvmlShutdown()
@@ -124,11 +137,36 @@ class TelemetrySampler:
 
     def _poll(self) -> TelemetrySample | None:
         ts = time.monotonic() - self._t0
+        if self._portable_collector is not None:
+            return self._poll_portable(ts)
         if self._source == "nvml":
             return self._poll_nvml(ts)
         if self._source == "nvidia-smi":
             return self._poll_smi(ts)
         return None
+
+    def _poll_portable(self, ts: float) -> TelemetrySample | None:
+        collector = self._portable_collector
+        if collector is None:
+            return None
+        try:
+            payload = collector.snapshot()
+        except Exception:
+            return None
+        if not isinstance(payload, dict) or payload.get("source") == "unavailable":
+            return None
+
+        def number(key: str) -> float | None:
+            value = payload.get(key)
+            return float(value) if isinstance(value, (int, float)) else None
+
+        return TelemetrySample(
+            timestamp_s=ts,
+            gpu_power_w=number("gpu_power_w"),
+            gpu_temp_c=number("gpu_temp_c"),
+            gpu_mem_used_mb=number("gpu_memory_mb"),
+            source=str(payload.get("source") or self._source),
+        )
 
     def _poll_nvml(self, ts: float) -> TelemetrySample | None:
         pynvml = self._pynvml

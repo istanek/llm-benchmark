@@ -81,15 +81,61 @@ def _nvidia_accelerators() -> list[AcceleratorInfo]:
     return devices
 
 
+def _apple_accelerators(os_family: str, architecture: str) -> list[AcceleratorInfo]:
+    if os_family != "darwin" or architecture not in {"arm64", "aarch64"}:
+        return []
+    return [
+        AcceleratorInfo(
+            kind="gpu",
+            vendor="apple",
+            model="Apple Silicon GPU",
+            memory_kind="unified",
+        )
+    ]
+
+
+def _amd_accelerators(os_family: str) -> list[AcceleratorInfo]:
+    if os_family != "linux":
+        return []
+    try:
+        completed = subprocess.run(
+            ["lspci"], capture_output=True, check=False, text=True, timeout=3.0
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if completed.returncode != 0:
+        return []
+    devices: list[AcceleratorInfo] = []
+    for line in completed.stdout.splitlines():
+        if "[AMD/ATI]" not in line or "controller" not in line.lower():
+            continue
+        model = line.split("[AMD/ATI]", 1)[1].strip()
+        if model:
+            devices.append(
+                AcceleratorInfo(
+                    kind="gpu", vendor="amd", model=model, memory_kind="unknown"
+                )
+            )
+    return devices
+
+
 def discover_hardware() -> HardwareInventory:
     """Discover portable host facts without requiring optional vendor libraries."""
+    os_family = platform.system().lower() or "unknown"
+    architecture = platform.machine().lower() or "unknown"
+    accelerators: list[AcceleratorInfo] = []
+    if os_family == "darwin":
+        accelerators.extend(_apple_accelerators(os_family, architecture))
+    elif os_family == "linux":
+        accelerators.extend(_nvidia_accelerators())
+        accelerators.extend(_amd_accelerators(os_family))
     return HardwareInventory(
-        os_family=platform.system().lower() or "unknown",
-        architecture=platform.machine().lower() or "unknown",
+        os_family=os_family,
+        architecture=architecture,
         cpu=CpuInfo(
             model=platform.processor() or "unknown",
             logical_cores=max(1, os.cpu_count() or 1),
         ),
         memory=MemoryInfo(total_mb=_memory_total_mb()),
-        accelerators=_nvidia_accelerators(),
+        accelerators=accelerators,
     )
