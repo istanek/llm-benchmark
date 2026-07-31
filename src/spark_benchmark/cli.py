@@ -40,7 +40,13 @@ from spark_benchmark.model_registry import (
     resolve_runnable_models,
 )
 from spark_benchmark.models import ModelConfig
-from spark_benchmark.orchestration import BenchmarkPlan, parse_benchmark_request, run_benchmark_bundle
+from spark_benchmark.orchestration import (
+    BenchmarkPlan,
+    load_openclaw_speed_suite,
+    parse_benchmark_request,
+    run_benchmark_bundle,
+    run_openclaw_speed_suite,
+)
 from spark_benchmark.quant_sweep import enrich_with_quant_sweep
 from spark_benchmark.reporting import aggregate_runs, render_cli_benchmark_summary, write_report
 from spark_benchmark.reliability import (
@@ -480,6 +486,16 @@ def run(
             )
         elif run_suite in {"practical_structured_output", "practical_structured_output_v1"}:
             summary = run_practical_structured_output_suite(
+                run_dir=run_dir,
+                suite=suite,
+                backend=backend,
+                backend_config=backend_config,
+                model_configs=model_configs,
+                sampling=experiment_spec.sampling,
+            )
+        elif run_suite in {"openclaw_speed", "openclaw_speed_v1"}:
+            suite = load_openclaw_speed_suite(repo_root)
+            summary = run_openclaw_speed_suite(
                 run_dir=run_dir,
                 suite=suite,
                 backend=backend,
