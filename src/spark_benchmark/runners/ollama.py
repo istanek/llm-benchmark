@@ -14,6 +14,7 @@ from spark_benchmark.models import (
     ModelConfig,
     SamplingConfig,
 )
+from spark_benchmark.runners.capabilities import BackendCapabilities
 
 
 DEFAULT_ENDPOINT = "http://localhost:11434/api/generate"
@@ -72,6 +73,13 @@ def model_is_cloud(model: ModelConfig | None) -> bool:
 
 
 class OllamaAdapter:
+    capabilities = BackendCapabilities(
+        transport="http",
+        supports_seed=True,
+        native_metrics={"prefill_tokens", "decode_tokens", "prefill_time_s", "decode_time_s"},
+        metric_limitations={"ttft_ms": "estimated_from_prefill_time_s"},
+    )
+
     def __init__(self, config: BackendConfig) -> None:
         self.config = config
         self.model: ModelConfig | None = None

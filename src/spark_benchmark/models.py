@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from .hardware import HardwareInventory
+
 
 class BackendKind(str, Enum):
     LLAMACPP = "llamacpp"
@@ -113,6 +115,7 @@ class EnvironmentSnapshot(BaseModel):
     python_version: str
     os: str
     hostname: str
+    hardware: HardwareInventory
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

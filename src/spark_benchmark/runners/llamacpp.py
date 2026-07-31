@@ -6,9 +6,20 @@ import time
 from pathlib import Path
 
 from spark_benchmark.models import BackendConfig, GenerationResult, InferenceMetrics, ModelConfig, SamplingConfig
+from spark_benchmark.runners.capabilities import BackendCapabilities
 
 
 class LlamaCppAdapter:
+    capabilities = BackendCapabilities(
+        transport="subprocess",
+        supports_seed=True,
+        metric_limitations={
+            "ttft_ms": "unavailable_from_llama_cli",
+            "prefill_tokens": "unavailable_from_llama_cli",
+            "decode_tokens": "unavailable_from_llama_cli",
+        },
+    )
+
     def __init__(self, config: BackendConfig) -> None:
         self.config = config
         self.model: ModelConfig | None = None

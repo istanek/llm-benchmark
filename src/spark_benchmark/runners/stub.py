@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 from spark_benchmark.models import BackendConfig, GenerationResult, InferenceMetrics, ModelConfig, SamplingConfig
+from spark_benchmark.runners.capabilities import BackendCapabilities
 
 
 class StubBackendAdapter:
+    capabilities = BackendCapabilities(
+        transport="unavailable",
+        metric_limitations={"all": "backend_adapter_not_implemented"},
+    )
+
     def __init__(self, config: BackendConfig) -> None:
         self.config = config
         self.model: ModelConfig | None = None

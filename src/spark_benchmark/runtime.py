@@ -5,17 +5,21 @@ import socket
 import sys
 from pathlib import Path
 
+from spark_benchmark.hardware import discover_hardware
 from spark_benchmark.models import BackendConfig, EnvironmentSnapshot, ExperimentSpec, PlatformConfig, RunManifest
 
 
-def build_environment_snapshot(platform_config: PlatformConfig, backend_config: BackendConfig) -> EnvironmentSnapshot:
+def build_environment_snapshot(
+    platform_config: PlatformConfig | None, backend_config: BackendConfig
+) -> EnvironmentSnapshot:
     return EnvironmentSnapshot(
-        platform_name=platform_config.name,
+        platform_name=platform_config.name if platform_config is not None else "auto-detected",
         backend_name=backend_config.name,
         backend_version=backend_config.version,
         python_version=sys.version.split()[0],
         os=platform.platform(),
         hostname=socket.gethostname(),
+        hardware=discover_hardware(),
     )
 
 
