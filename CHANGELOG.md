@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-01
+
+### Added
+
+- **`tests/test_fixture_canary.py` — the harness must prove it can tell right
+  from wrong.** Both bugs fixed in this release had the same shape: the
+  pipeline reported plausible pass rates while not testing what it claimed.
+  The canary runs known-good code (canonical solutions) and known-bad code (a
+  stub with the right signature returning `None`) through the real pipeline and
+  asserts both verdicts, over a deterministic sample of the fixture plus the
+  tasks with prompt-defined helpers. Validated by reintroducing each bug: the
+  missing `check()` call trips `test_stubbed_solutions_fail`, the missing
+  helper injection trips `test_canonical_solutions_pass`. Runs in ~1.3 s, so it
+  guards every CI run.
+
 ### Fixed
 
 - **Prompt-defined helper functions were missing from the sandbox.** A few
