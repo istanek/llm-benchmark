@@ -5,7 +5,15 @@ import subprocess
 import time
 from pathlib import Path
 
-from llm_benchmark.models import BackendConfig, GenerationResult, InferenceMetrics, ModelConfig, SamplingConfig
+from llm_benchmark.models import (
+    BackendConfig,
+    GenerationResult,
+    InferenceMetrics,
+    ModelConfig,
+    SamplingConfig,
+    sampling_for_model,
+)
+from llm_benchmark.runners.base import ensure_model_supported
 from llm_benchmark.runners.capabilities import BackendCapabilities
 
 
@@ -29,6 +37,7 @@ class LlamaCppAdapter:
         )
 
     def load_model(self, model_config: ModelConfig) -> None:
+        ensure_model_supported(self.capabilities, "llamacpp", model_config)
         self.model = model_config
         self.last_metrics.quantization = model_config.quantization
 
@@ -64,6 +73,7 @@ class LlamaCppAdapter:
         return str(model_path)
 
     def generate(self, prompt: str, params: SamplingConfig) -> GenerationResult:
+        params = sampling_for_model(params, self.model)
         executable = self._resolve_executable()
         model_path = self._require_model_path()
         started = time.perf_counter()

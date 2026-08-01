@@ -76,7 +76,32 @@ class ModelConfig(BaseModel):
     # from `name` (brittle for odd names). Primarily consumed by the
     # quantization_sweep post-processor; long_context uses it for labels.
     base_model: str | None = None
+    # Backend "thinking" / reasoning mode. None keeps the harness default
+    # (off), which is how the v1 lineup was measured — leaving it alone means
+    # existing numbers stay comparable. Set True for a model whose answer is
+    # only produced after a reasoning pass; the backend must support it
+    # (BackendCapabilities.supports_reasoning), otherwise the run fails loudly
+    # rather than silently measuring a different mode than the config asks for.
+    reasoning: bool | None = None
+    # Per-model output budget, overriding the experiment's sampling.max_tokens
+    # for this model alone. A reasoning model can spend the whole shared budget
+    # on its scratchpad and get truncated mid-answer — scored, wrongly, as a
+    # model that cannot code. The experiment config sets a budget that suits
+    # the suite; this raises it for the models that need more.
+    max_output_tokens: int | None = None
     notes: list[str] = Field(default_factory=list)
+
+
+def sampling_for_model(sampling: SamplingConfig, model: ModelConfig | None) -> SamplingConfig:
+    """Apply a model's per-model overrides on top of the experiment sampling.
+
+    Kept here rather than in each backend so every adapter resolves the budget
+    the same way, and so the returned config is the one recorded in results —
+    an override that does not show up in the manifest is a reproducibility bug.
+    """
+    if model is None or model.max_output_tokens is None:
+        return sampling
+    return sampling.model_copy(update={"max_tokens": model.max_output_tokens})
 
 
 class BackendConfig(BaseModel):

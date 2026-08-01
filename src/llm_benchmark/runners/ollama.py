@@ -13,7 +13,9 @@ from llm_benchmark.models import (
     InferenceMetrics,
     ModelConfig,
     SamplingConfig,
+    sampling_for_model,
 )
+from llm_benchmark.runners.base import ensure_model_supported
 from llm_benchmark.runners.capabilities import BackendCapabilities
 
 
@@ -76,6 +78,7 @@ class OllamaAdapter:
     capabilities = BackendCapabilities(
         transport="http",
         supports_seed=True,
+        supports_reasoning=True,
         native_metrics={"prefill_tokens", "decode_tokens", "prefill_time_s", "decode_time_s"},
         metric_limitations={"ttft_ms": "estimated_from_prefill_time_s"},
     )
@@ -94,6 +97,7 @@ class OllamaAdapter:
         )
 
     def load_model(self, model_config: ModelConfig) -> None:
+        ensure_model_supported(self.capabilities, "ollama", model_config)
         self.model = model_config
         self.last_metrics.quantization = model_config.quantization
 
@@ -161,11 +165,18 @@ class OllamaAdapter:
             "model": self._model_tag(),
             "prompt": prompt,
             "stream": False,
-            "think": False,
+            # Off unless the model config asks for it. Hardcoding False made
+            # every reasoning model unmeasurable in its own operating mode:
+            # the answer was produced without the pass the model is built
+            # around, and nothing in the results said so.
+            "think": bool(self.model.reasoning) if self.model is not None else False,
             "options": options,
         }
 
     def generate(self, prompt: str, params: SamplingConfig) -> GenerationResult:
+        # Per-model budget resolved here so the payload, the recorded request
+        # and the truncation flag all refer to the same number.
+        params = sampling_for_model(params, self.model)
         payload = self._build_payload(prompt, params)
         body = json.dumps(payload).encode("utf-8")
         endpoint = self._generate_endpoint()

@@ -85,6 +85,49 @@ Phase 1 focuses on config validation, orchestration shape, backend abstraction, 
 
 ---
 
+## Swapping the model lineup
+
+The point of the harness is to answer "which of these models should I use",
+for whichever models those are. The v1 lineup — qwen-3.6, gemma-4, nemotron-3
+— is three entries in `configs/experiments/*.yaml`, and nothing in `src/`
+hardcodes it: adding a model is one YAML under `configs/models/`, or nothing
+at all, since `model_registry` can synthesise a config from a running Ollama's
+`/api/tags`.
+
+What is *not* automatic is everything the suites assumed because all three
+models happened to behave the same way. Those assumptions are now config, not
+constants:
+
+- **Reasoning mode.** The Ollama payload sent `think: false` unconditionally.
+  A reasoning model was therefore measured with the pass it is built around
+  switched off, and nothing in the results said so. Model configs now carry
+  `reasoning: true|false`; a backend that cannot honour it refuses the model
+  instead of quietly running it the other way.
+- **Output budget.** One `sampling.max_tokens` per experiment fits models with
+  similar verbosity. A model that thinks in tokens spends the budget before it
+  answers and is scored as incapable — the same failure that cost a 4.5 h MBPP
+  run. `max_output_tokens` in a model config overrides the experiment budget
+  for that model alone.
+
+Two assumptions remain and are known limits rather than fixed problems:
+
+- **The grounding scorer is a list of English phrases.** A refusal worded
+  outside `ABSTAIN_PHRASES`, or written in another language, scores as a
+  hallucination. This is a false-negative machine for any model whose register
+  differs from the v1 three.
+- **Prompts go to Ollama's `/api/generate` raw**, so the chat template comes
+  from the model's Modelfile. The same model served through the
+  openai-compatible backend is not template-identical, and cross-backend
+  numbers are not directly comparable.
+
+`scripts/check_model_portability.py <tag>` runs a few tasks from each suite
+against any model and reports the four harness-side failure modes — empty
+answers, truncation, unparseable code, unmatched abstentions — separately from
+the pass rate. A bad score is a result; a high rate on any of those four means
+the score is not a measurement. Run it before trusting a new model's numbers.
+
+---
+
 ## Empirical findings
 
 Measurement provenance: the v0.4.x runs below were taken on an NVIDIA DGX

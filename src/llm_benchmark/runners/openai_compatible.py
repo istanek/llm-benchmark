@@ -12,7 +12,9 @@ from llm_benchmark.models import (
     InferenceMetrics,
     ModelConfig,
     SamplingConfig,
+    sampling_for_model,
 )
+from llm_benchmark.runners.base import ensure_model_supported
 from llm_benchmark.runners.capabilities import BackendCapabilities
 
 
@@ -61,6 +63,7 @@ class OpenAICompatibleAdapter:
         self.last_metrics = InferenceMetrics(backend_version=config.version)
 
     def load_model(self, model_config: ModelConfig) -> None:
+        ensure_model_supported(self.capabilities, "openai-compatible", model_config)
         self.model = model_config
         self.last_metrics.quantization = model_config.quantization
 
@@ -109,6 +112,7 @@ class OpenAICompatibleAdapter:
     def generate(self, prompt: str, params: SamplingConfig) -> GenerationResult:
         if self.model is None:
             raise RuntimeError("Model not loaded")
+        params = sampling_for_model(params, self.model)
         if self.stream:
             return self._generate_streaming(prompt, params)
         return self._generate_once(prompt, params)

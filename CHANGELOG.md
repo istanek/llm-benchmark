@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     conversion check. `mbpp/56` is excluded — its canonical solution recurses
     past Python's limit — and the exclusion is stated in the fixture notes.
 
+- **Per-model reasoning mode and output budget** — `ModelConfig` gains
+  `reasoning` and `max_output_tokens`. Both were previously constants tuned to
+  the v1 lineup: the Ollama payload hardcoded `think: false`, so a reasoning
+  model was measured with its reasoning pass off, and one experiment-wide
+  `max_tokens` truncated any model more verbose than those three. A backend
+  that cannot honour `reasoning` now refuses the model
+  (`BackendCapabilities.supports_reasoning`) instead of running it in the other
+  mode without saying so. The override is resolved in the adapter, so the
+  recorded request shows the budget actually sent.
+- **`scripts/check_model_portability.py`** — takes any Ollama tag (curated
+  config optional) and runs a few tasks from the code, grounding and
+  structured-output suites, reporting the four harness-side failure modes —
+  empty answers, truncation, unparseable code, abstentions the scorer's phrase
+  list misses — separately from the pass rate. Exits non-zero when the model is
+  not measurable as configured, and prints the config lines that would fix it.
 - **Draft of a harder grounding fixture, for review** —
   `data/reliability/hallucination_grounding_v2_draft.json`, 14 tasks. Not
   resolvable by suite name, not referenced by any config, and not run by
