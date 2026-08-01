@@ -25,6 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     conversion check. `mbpp/56` is excluded — its canonical solution recurses
     past Python's limit — and the exclusion is stated in the fixture notes.
 
+- **`llm-bench compare <bundle> --baseline <bundle>`** — the workflow the
+  harness exists for: run a new model, find out where it lands against models
+  already measured, without re-running them. Verdicts are `better` / `worse` /
+  `tie` by non-overlapping 95 % Wilson intervals. It **refuses** across a
+  provenance mismatch — different harness commit, dirty tree, missing stamp,
+  different fixture version, or a shared model run with different options —
+  because a verdict across that boundary is indistinguishable from a real one.
+  `--force` prints it under a recorded objection.
+- **Runs stamp their provenance** — `RunManifest.provenance` records the git
+  commit, whether the working tree was clean, and the options each model
+  actually ran with (`reasoning`, effective `max_tokens`, quantization, tag).
+  `suite_version` was never enough: both bugs that invalidated this project's
+  code results were code changes under an unchanged fixture version. Bundles
+  written before this field have none and cannot serve as a baseline without
+  `--force`.
 - **Per-model reasoning mode and output budget** — `ModelConfig` gains
   `reasoning` and `max_output_tokens`. Both were previously constants tuned to
   the v1 lineup: the Ollama payload hardcoded `think: false`, so a reasoning

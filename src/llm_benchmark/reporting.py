@@ -29,7 +29,7 @@ def collect_run_dirs(runs_root: Path) -> list[Path]:
     return sorted(path for path in runs_root.iterdir() if path.is_dir())
 
 
-def _passes_total_from_model(model: dict[str, Any]) -> tuple[int, int]:
+def passes_total_from_model(model: dict[str, Any]) -> tuple[int, int]:
     """Derive (passes, total) from a per-model summary entry across schemas.
 
     Reliability / speed suites store flat ``passes`` and ``total`` per model.
@@ -131,7 +131,7 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
                     "extra": {},
                 },
             )
-            passes, total = _passes_total_from_model(model)
+            passes, total = passes_total_from_model(model)
             model_bucket["passes"] += passes
             model_bucket["total"] += total
             model_bucket["runs"] += 1

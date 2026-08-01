@@ -54,6 +54,7 @@ from llm_benchmark.reliability import (
     run_hallucination_grounding_suite,
     run_practical_structured_output_suite,
 )
+from llm_benchmark.compare import compare_bundles, load_bundle, render_comparison
 from llm_benchmark.results_bundle import ensure_run_dir, make_run_id, write_json, write_manifest, write_result
 from llm_benchmark.runners.registry import build_backend
 from llm_benchmark.runtime import build_manifest
@@ -438,6 +439,8 @@ def run(
         backend_config=backend_config,
         model_names=[m.name for m in model_configs],
         results_dir=run_dir,
+        repo_root=repo_root,
+        model_configs=model_configs,
     )
     write_manifest(run_dir, manifest)
     print(json.dumps({"run_id": run_id, "run_dir": str(run_dir)}, ensure_ascii=False, indent=2))
@@ -1305,6 +1308,56 @@ def report(
     aggregate = aggregate_runs(runs)
     write_report(output, format, aggregate)
     print(json.dumps({"status": "ok", "output": str(output), "format": format}, ensure_ascii=False, indent=2))
+
+
+@app.command("compare")
+def compare_command(
+    bundle: Path = typer.Argument(..., exists=True, file_okay=False, dir_okay=True, help="Bundle holding the new model's run."),
+    baseline: Path = typer.Option(..., "--baseline", exists=True, file_okay=False, dir_okay=True, help="Bundle holding the already-measured models."),
+    model: list[str] = typer.Option(None, "--model", help="Restrict to these candidate models (default: every model in the bundle)."),
+    force: bool = typer.Option(False, "--force", help="Print a verdict even when the runs are not comparable."),
+    json_output: Path = typer.Option(None, "--json", help="Also write the comparison as JSON."),
+) -> None:
+    """Compare a new model's run against stored results from earlier runs.
+
+    Refuses when the two bundles were not produced by the same harness, the
+    same fixtures and the same per-model options — a verdict across that
+    boundary looks exactly like a real one and is not.
+    """
+    maybe_print_banner()
+    candidate_bundle = load_bundle(bundle)
+    baseline_bundle = load_bundle(baseline)
+    comparisons, blockers = compare_bundles(
+        candidate_bundle, baseline_bundle, models=list(model) if model else None
+    )
+    # typer.echo, not rich's print: the table is column-aligned and rich
+    # re-wraps it to the terminal width, which scrambles the columns.
+    typer.echo(render_comparison(comparisons, blockers, forced=force))
+
+    if json_output is not None:
+        write_json(
+            json_output,
+            {
+                "candidate_bundle": str(bundle),
+                "baseline_bundle": str(baseline),
+                "comparable": not blockers,
+                "forced": force,
+                "blockers": blockers,
+                "comparisons": [
+                    {
+                        "suite": c.suite,
+                        "model": c.model,
+                        "baseline_model": c.baseline_model,
+                        "candidate": {"passes": c.candidate.passes, "total": c.candidate.total, "rate": c.candidate.rate},
+                        "baseline": {"passes": c.baseline.passes, "total": c.baseline.total, "rate": c.baseline.rate},
+                        "verdict": c.verdict,
+                    }
+                    for c in comparisons
+                ],
+            },
+        )
+    if blockers and not force:
+        raise typer.Exit(code=2)
 
 
 @app.command()

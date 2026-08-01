@@ -120,6 +120,39 @@ Two assumptions remain and are known limits rather than fixed problems:
   openai-compatible backend is not template-identical, and cross-backend
   numbers are not directly comparable.
 
+### Comparing a new model against stored results
+
+Re-measuring the incumbents for every candidate is not affordable — one MBPP
+pass over three models takes 4.5 hours — so a new model is compared against
+bundles already on disk:
+
+```
+llm-bench compare results/benchmarks/<new-run> --baseline results/benchmarks/<earlier-run>
+```
+
+Verdicts are `better` / `worse` / `tie` by non-overlapping 95 % Wilson
+intervals, the same rule used everywhere else here. Overlap is reported as a
+tie rather than a ranking with a small gap.
+
+The comparison **refuses** when the two runs were not produced by the same
+instrument, rather than printing a plausible verdict: different harness
+commit, either side measured from a dirty tree, missing provenance, different
+fixture version, or a shared model that ran with different options
+(`reasoning`, effective `max_tokens`, quantization, tag). `--force` prints it
+anyway and says in the output that it did.
+
+The strictness is not theoretical. Both bugs that invalidated this project's
+code numbers were changes to *code*, with `suite_version` sitting at `0.1.0`
+throughout: the same fixture first measured "does the output compile" and then
+"does it pass the tests", and nemotron-3 moved 20 points between them. A
+bundle that records only the fixture version cannot tell you which of the two
+it holds. Every run now stamps its commit, whether the tree was clean, and the
+options each model actually ran with.
+
+Bundles produced before this stamp exists — everything up to and including the
+2026-08-01 MBPP runs — carry no provenance and are therefore not usable as a
+baseline without `--force`.
+
 `scripts/check_model_portability.py <tag>` runs a few tasks from each suite
 against any model and reports the four harness-side failure modes — empty
 answers, truncation, unparseable code, unmatched abstentions — separately from

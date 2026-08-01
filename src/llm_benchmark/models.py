@@ -154,6 +154,23 @@ class EnvironmentSnapshot(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class HarnessProvenance(BaseModel):
+    """The measuring device: which code ran, and what each model was asked.
+
+    ``git_dirty`` is None when it could not be determined (no checkout, no git)
+    — distinct from False, and treated as "unknown" by the comparability check.
+    See ``llm_benchmark.provenance`` for why a fixture version is not enough.
+    """
+
+    schema_version: str = "harness-provenance/v1"
+    git_commit: str | None = None
+    git_dirty: bool | None = None
+    # model name -> the options it actually ran with (reasoning, effective
+    # max_tokens, quantization, tag). Per-model overrides mean the experiment's
+    # sampling block no longer describes every model in the run.
+    model_options: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
 class RunManifest(BaseModel):
     experiment: ExperimentSpec
     platform: PlatformConfig
@@ -161,3 +178,6 @@ class RunManifest(BaseModel):
     model_names: list[str]
     environment: EnvironmentSnapshot
     results_dir: Path
+    # Optional so manifests written before this field remain loadable; a run
+    # without it cannot be compared against anything without --force.
+    provenance: HarnessProvenance | None = None

@@ -225,6 +225,8 @@ def run_benchmark_bundle(
             backend_config=backend_config,
             model_names=[model.name for model in model_configs],
             results_dir=suite_dir,
+            repo_root=repo_root,
+            model_configs=model_configs,
         )
         write_manifest(suite_dir, manifest)
 
