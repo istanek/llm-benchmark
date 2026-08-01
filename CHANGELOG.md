@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The code sandbox never ran the tests it reported on.** `_build_program`
+  appended the fixture's `tests` block — which only *defines*
+  `check(candidate)` — and never emitted the `check(<entry_point>)` call. The
+  sandboxed module therefore compiled, exited 0 and was recorded as a pass, so
+  `pass@1` measured "does the output parse and import", not correctness. A
+  deliberately wrong solution (`return False` for `has_close_elements`) scored
+  as correct. The invocation is now appended and three regression tests pin it,
+  including the wrong-solution case that would have caught this originally.
+  **All previously published `code_generation` numbers are invalid**, including
+  the full-HumanEval table added earlier today; METHODOLOGY.md marks that
+  section as retracted.
+
 ### Changed
 
 - **`code-generation.yaml` raises `max_tokens` from 512 to 1536.** The first

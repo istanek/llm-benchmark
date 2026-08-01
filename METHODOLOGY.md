@@ -126,6 +126,15 @@ seed-varied repetitions.
 
 ### Full HumanEval, and what the token budget did to it (v0.6.0, 2026-08-01)
 
+> **RETRACTED — the numbers in this section are invalid.** The harness was not
+> executing the tests it reported on. `_build_program` appended the fixture's
+> `tests` block, which only *defines* `check(candidate)`, and never called it,
+> so the sandboxed module compiled, exited 0, and every syntactically valid
+> answer counted as correct. The pass rates below therefore measure "does the
+> output parse and import", not correctness. Fixed in the following commit
+> (with a regression test that a deliberately wrong solution must fail); the
+> section is kept for the record and superseded by the re-run below.
+
 First run of the complete 164-problem set against the v1 lineup via Ollama
 (`results/benchmarks/20260731T221321Z-9d630d4a`, 110 min total):
 

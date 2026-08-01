@@ -151,7 +151,9 @@ def extract_code(output: str, prompt: str, entry_point: str) -> str:
     return prompt + candidate
 
 
-def _build_program(extracted_code: str, tests: str, prompt: str = "") -> str:
+def _build_program(
+    extracted_code: str, tests: str, prompt: str = "", entry_point: str = ""
+) -> str:
     """Stitch extracted code and canonical tests into a runnable module.
 
     HumanEval prompts include the imports the function needs (``from typing
@@ -159,6 +161,10 @@ def _build_program(extracted_code: str, tests: str, prompt: str = "") -> str:
     without re-emitting those imports. Re-inject any imports from the prompt
     that are missing from the extracted code so the sandbox doesn't trip on
     ``NameError: List``.
+
+    The fixture's ``tests`` only *define* ``check(candidate)``. The call has to
+    be appended here — without it the module merely compiles, exits 0, and
+    every syntactically valid answer scores as correct.
     """
     extracted_import_lines = {
         line.strip()
@@ -176,7 +182,10 @@ def _build_program(extracted_code: str, tests: str, prompt: str = "") -> str:
         missing.append(stripped)
         seen.add(stripped)
     prelude = ("\n".join(missing) + "\n\n") if missing else ""
-    return f"{prelude}{extracted_code}\n\n# --- begin canonical tests ---\n{tests}\n"
+    invocation = f"\ncheck({entry_point})\n" if entry_point else ""
+    return (
+        f"{prelude}{extracted_code}\n\n# --- begin canonical tests ---\n{tests}\n{invocation}"
+    )
 
 
 def _build_preexec(mem_limit_mb: int, cpu_seconds: int) -> Any:
@@ -302,7 +311,7 @@ def evaluate_task(
     correct = 0
     for index, (generation, seed) in enumerate(zip(generations, sample_seeds)):
         extracted = extract_code(generation.output, task.prompt, entry_point)
-        program = _build_program(extracted, tests, prompt=task.prompt)
+        program = _build_program(extracted, tests, prompt=task.prompt, entry_point=entry_point)
         sandbox = sandbox_run(
             program,
             timeout_s=sandbox_timeout_s,

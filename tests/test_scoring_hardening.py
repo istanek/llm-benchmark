@@ -434,6 +434,60 @@ def test_code_generation_marks_truncated_samples() -> None:
     assert outcome.pass_at_1 == 0.0
 
 
+# --------------------------------------------------------------------- #
+# The code sandbox must actually run the tests                           #
+# --------------------------------------------------------------------- #
+
+
+def _code_task():
+    from llm_benchmark.code_generation import load_code_generation_suite
+
+    return load_code_generation_suite(REPO_ROOT).tasks[0]
+
+
+def _evaluate_code(output: str):
+    from llm_benchmark.code_generation import evaluate_task
+
+    generation = GenerationResult(
+        prompt="p", output=output, finish_reason="stop", metrics=InferenceMetrics(), raw={}
+    )
+    outcome = evaluate_task(
+        _code_task(),
+        generations=[generation],
+        sample_seeds=[42],
+        sandbox_timeout_s=15.0,
+        sandbox_memory_mb=1024,
+    )
+    return outcome.samples[0].sandbox
+
+
+def test_wrong_solution_fails_the_sandbox() -> None:
+    """The fixture only defines check(); _build_program must also call it.
+
+    Without the call the module compiled, exited 0 and every syntactically
+    valid answer scored as correct — pass@1 measured "does it parse".
+    """
+    sandbox = _evaluate_code("def has_close_elements(numbers, threshold):\n    return False\n")
+
+    assert sandbox.passed is False
+    assert sandbox.status == "failed"
+
+
+def test_canonical_solution_passes_the_sandbox() -> None:
+    task = _code_task()
+    sandbox = _evaluate_code(task.prompt + task.metadata["canonical_solution"])
+
+    assert sandbox.passed is True
+
+
+def test_build_program_appends_the_check_invocation() -> None:
+    from llm_benchmark.code_generation import _build_program
+
+    program = _build_program("def f():\n    pass\n", "def check(candidate):\n    pass\n", entry_point="f")
+
+    assert program.rstrip().endswith("check(f)")
+
+
 def _run_all() -> int:
     """Lightweight runner so tests work without pytest installed system-wide."""
     import inspect
