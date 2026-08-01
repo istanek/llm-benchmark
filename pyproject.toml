@@ -23,9 +23,13 @@ llm-bench = "llm_benchmark.cli:app"
 llm_benchmark = "llm_benchmark.cli:shell_entrypoint"
 llm-benchmark = "llm_benchmark.cli:shell_entrypoint"
 # Deprecated pre-rename aliases, kept so existing scripts and shell history
-# keep working. Remove in 1.0.
+# keep working. Remove in 1.0. The underscore spelling is here because the
+# pre-rename install put one in ~/.local/bin and muscle memory outlives a
+# rename — without it, `spark_benchmark` stays a stale script importing a
+# module that no longer exists.
 spark-bench = "llm_benchmark.cli:app"
 spark-benchmark = "llm_benchmark.cli:shell_entrypoint"
+spark_benchmark = "llm_benchmark.cli:shell_entrypoint"
 
 [tool.pytest.ini_options]
 # So `pytest` works in a checkout without `pip install -e .`; CI installs the

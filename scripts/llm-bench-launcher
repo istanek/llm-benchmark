@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Run the CLI from anywhere, without installing the package.
+#
+# Install (or re-install after moving the repo):
+#
+#     bash scripts/install-launchers.sh
+#
+# Why a launcher and not `pip install -e .`:
+#
+#   1. This system's Python is externally managed (PEP 668), so a user install
+#      needs --break-system-packages. The last one left three scripts in
+#      ~/.local/bin importing `spark_benchmark`, a module that stopped existing
+#      at the rename — they have been broken ever since.
+#   2. The repo lives under /tmp, which is wiped on reboot. An editable install
+#      would then point at nothing and fail with an import error; this fails
+#      with a sentence telling you what happened.
+#
+# The command name decides the surface, matching pyproject's [project.scripts]:
+#
+#   llm-bench, spark-bench                        -> Typer commands (run, compare, report, ...)
+#   llm_benchmark, llm-benchmark,
+#   spark_benchmark, spark-benchmark              -> interactive shell
+
+set -u
+
+REPO="${LLM_BENCH_REPO:-/tmp/spark-benchmark-laguna}"
+
+if [ ! -d "$REPO/src/llm_benchmark" ]; then
+    cat >&2 <<EOF
+llm-benchmark: no checkout at $REPO
+
+The repo lives under /tmp, which is wiped on reboot. Re-clone it and point
+this launcher at the new location:
+
+    git clone https://github.com/istanek/llm-benchmark.git ~/llm-benchmark
+    export LLM_BENCH_REPO=~/llm-benchmark    # add to ~/.bashrc to make it stick
+EOF
+    exit 1
+fi
+
+case "$(basename "$0")" in
+    llm-bench|spark-bench) entry="app" ;;
+    *) entry="shell_entrypoint" ;;
+esac
+
+# The CLI resolves the repo root from the package location, so commands find
+# configs/ and data/ without a --repo flag no matter where you invoke them.
+export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -c "
+import sys
+from llm_benchmark.cli import $entry as entry
+sys.argv[0] = '$(basename "$0")'
+entry()
+" "$@"

@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     conversion check. `mbpp/56` is excluded — its canonical solution recurses
     past Python's limit — and the exclusion is stated in the fixture notes.
 
+- **Launchers so the CLI runs from anywhere** — `scripts/llm-bench-launcher`
+  plus `scripts/install-launchers.sh`, which put `llm-bench`, `llm_benchmark`,
+  `spark_benchmark` and the other declared names on `$PATH`. No install step:
+  this system's Python is externally managed (PEP 668), and the last
+  `pip install -e .` left three scripts in `~/.local/bin` importing
+  `spark_benchmark` — a module that stopped existing at the rename, so every
+  one of them had been failing with `ModuleNotFoundError`. The launcher also
+  reports a missing checkout in a sentence, since the repo lives under `/tmp`
+  and does not survive a reboot. `LLM_BENCH_REPO` points it elsewhere.
+  `spark_benchmark` (underscore) is now a declared entry point too.
 - **`llm-bench compare <bundle> --baseline <bundle>`** — the workflow the
   harness exists for: run a new model, find out where it lands against models
   already measured, without re-running them. Verdicts are `better` / `worse` /
