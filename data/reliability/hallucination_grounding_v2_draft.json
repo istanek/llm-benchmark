@@ -1,0 +1,196 @@
+{
+  "name": "hallucination_grounding_v2_draft",
+  "category": "reliability",
+  "version": "0.0.1-draft",
+  "description": "DRAFT, NOT WIRED INTO ANY SUITE. Harder grounding fixture: every task places a plausible wrong answer within reach, so that abstaining or answering correctly requires reading the context rather than pattern-matching it. Proposed successor to hallucination_grounding_v1, which all three v1 models pass at 100 %.",
+  "notes": [
+    "Not resolvable by fixture_path_for_suite_name and not referenced by any config. Nothing runs this until it is reviewed and wired in deliberately.",
+    "v1 is saturated: gemma-4, qwen-3.6 and nemotron-3 all score 100 %, so it cannot answer 'which model invents less'. In v1 the missing fact is simply absent from a short context; here it is absent but surrounded by near neighbours.",
+    "Design rule for every task: a confident wrong answer is available in the context (an adjacent attribute, the same value on a different entity, or the same entity in a different role). Guessing is rewarded by plausibility, not punished by obviousness.",
+    "Entities are invented. Real-world entities would let a model answer from training data and would score parametric recall instead of grounding.",
+    "The tasks tagged 'needs-scorer-support' cannot be scored by the current scorer and are listed separately at the end — see the review notes below.",
+    "REVIEW NOTE (scoring mechanics): score_hallucination_task recognises exactly three behaviours. 'abstain' requires one of ABSTAIN_PHRASES in the output and no hedged guess; 'answer_from_context' fails if any abstention phrase appears; 'correct_user' requires a negation plus the corrected value. Every expected_values entry here is punctuation-free, because values are matched as literal substrings and '1,412' does not match '1412'.",
+    "REVIEW NOTE (found while drafting): ABSTAIN_PHRASES is a closed list, and five of the six abstention references here failed it on first writing — phrasings like 'the context only gives the second line's opening' or 'that figure is for Ferrand-1' are correct abstentions the scorer reads as hallucinations. v1 hides this because its abstentions have nowhere to go but the canonical wording; these tasks give the model a near-neighbour to name, which invites exactly the phrasing the list misses. Every reference below is now worded to pass, but that is the fixture bending to the scorer. Before this suite is trusted, ABSTAIN_PHRASES needs 'does not record', 'does not list', 'only mentions', 'only gives', 'is for' and similar, and a false-negative check against real model outputs.",
+    "REVIEW NOTE (what this cannot measure): a model that abstains on everything scores 100 % on the abstain tasks. The grounded and correct_user tasks are what stop that strategy, so the suite must be read per-tag, not as one pass rate. Suggested reporting: abstention rate on the missing-evidence tags, accuracy on the answerable tags, and the difference between them."
+  ],
+  "tasks": [
+    {
+      "task_id": "hg-v2-001-abstain-adjacent-attribute",
+      "prompt": "Based only on the context, in which year was the Ferrand-2 probe decommissioned?",
+      "context": "The Ferrand-2 probe was assembled in 2019 and launched in 2021. Its sister probe, Ferrand-1, was decommissioned in 2022 after a nine-year mission.",
+      "reference": "The context does not say when Ferrand-2 was decommissioned; 2022 is Ferrand-1's decommissioning year.",
+      "tags": ["abstention", "missing-evidence", "near-miss", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "abstain",
+        "review_note": "The context contains a decommissioning year, just for the other probe. A model matching on 'decommissioned' + a year answers 2022 with full confidence. v1 never puts the wrong answer this close."
+      }
+    },
+    {
+      "task_id": "hg-v2-002-abstain-wrong-milestone",
+      "prompt": "Based only on the context, when did the Kappa plant's first assembly line open?",
+      "context": "The Kappa plant was announced in 2021 and its second assembly line opened in March 2024. The site employs 420 people.",
+      "reference": "The context does not say when the first line opened; it gives the announcement year and the second line's opening.",
+      "tags": ["abstention", "missing-evidence", "near-miss", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "abstain",
+        "review_note": "Two dates are present and neither is the one asked for. The trap is the assumption that 'the plant opened' and 'the first line opened' are the same event."
+      }
+    },
+    {
+      "task_id": "hg-v2-003-abstain-mismatched-period",
+      "prompt": "Based only on the context, what was Meridian Foods' revenue in 2024?",
+      "context": "Meridian Foods reported revenue of 84 million euro in 2023 and grew its headcount to 1200 during 2024.",
+      "reference": "The context does not state 2024 revenue; it gives 2023 revenue and 2024 headcount.",
+      "tags": ["abstention", "missing-evidence", "temporal", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "abstain",
+        "review_note": "Both requested dimensions appear in the context but crossed: the year is right on one figure, the metric on the other. Carrying 84 million into 2024 is the expected failure."
+      }
+    },
+    {
+      "task_id": "hg-v2-004-abstain-unsupported-aggregate",
+      "prompt": "Based only on the context, what was Meridian Foods' total revenue for the full year 2023?",
+      "context": "Meridian Foods reported revenue of 21 million euro in the first quarter of 2023 and 23 million euro in the second quarter of 2023.",
+      "reference": "The context covers only the first two quarters, so the full-year total cannot be determined from it.",
+      "tags": ["abstention", "missing-evidence", "aggregation", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "abstain",
+        "review_note": "Arithmetic is available and wrong: 44 million is a defensible-looking sum of an incomplete set. Distinguishes 'can compute' from 'may compute'. A model that answers 44 million with a stated caveat is still scored as a failure, which is deliberate but worth your review."
+      }
+    },
+    {
+      "task_id": "hg-v2-005-abstain-entity-other-role",
+      "prompt": "Based only on the context, where is the Delta router manufactured?",
+      "context": "The Delta router was certified by the Kappa test laboratory, which operates from Brno. Its firmware is maintained by a team in Plzen.",
+      "reference": "The context does not say where the router is manufactured; it gives the laboratory's and the firmware team's locations.",
+      "tags": ["abstention", "missing-evidence", "role-confusion", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "abstain",
+        "review_note": "Two cities are on offer and both attach to the product through a different relation. Tests whether the model tracks the relation or just the entity pair."
+      }
+    },
+    {
+      "task_id": "hg-v2-006-abstain-acquirer-direction",
+      "prompt": "Based only on the context, which company did Larch Industries acquire in 2019?",
+      "context": "Larch Industries acquired the logistics division of Brandt Group in 2022. Brandt Group had itself acquired Consell in 2019.",
+      "reference": "The context does not mention any 2019 acquisition by Larch Industries; the 2019 acquisition was made by Brandt Group.",
+      "tags": ["abstention", "missing-evidence", "role-confusion", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "abstain",
+        "review_note": "Every token in the question appears in the context — Larch, acquired, 2019 — but never in the same clause. Answering 'Consell' requires ignoring who the subject of the sentence is."
+      }
+    },
+    {
+      "task_id": "hg-v2-007-grounded-role-disambiguation",
+      "prompt": "Based only on the context, who wrote the April validation report?",
+      "context": "The April validation report was reviewed by Nowak and approved by Hejna after it was written by Dvorak.",
+      "reference": "Dvorak",
+      "tags": ["grounded", "role-confusion", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "answer_from_context",
+        "expected_values": ["Dvorak"],
+        "review_note": "Answerable, and the answer is in last position behind two other names in more prominent syntactic slots. This is the counterweight to the abstain tasks: a model that abstains whenever the context looks crowded fails here."
+      }
+    },
+    {
+      "task_id": "hg-v2-008-grounded-context-over-prior",
+      "prompt": "Based only on the context, at what bearing in degrees does the Laguna survey convention place east?",
+      "context": "Under the Laguna survey convention used in this document, north is written as 90 degrees and east as 0 degrees. The convention is deliberately rotated relative to standard compass bearings.",
+      "reference": "0 degrees",
+      "tags": ["grounded", "context-over-prior", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "answer_from_context",
+        "expected_values": ["0 degrees"],
+        "review_note": "The context contradicts a convention every model has memorised (east = 90). Measures whether supplied context outranks parametric knowledge. REVIEW: '0 degrees' is matched literally, so an answer of 'zero' or '0°' scores as a failure. If you keep this task, the scorer should accept a small set of alternates per value."
+      }
+    },
+    {
+      "task_id": "hg-v2-009-grounded-superseded-value",
+      "prompt": "Based only on the context, what is the current maximum payload of the Ferrand-2 probe?",
+      "context": "The Ferrand-2 design review lists a maximum payload of 220 kilograms. A later addendum supersedes that figure and sets the current maximum payload at 185 kilograms.",
+      "reference": "185 kilograms",
+      "tags": ["grounded", "supersession", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "answer_from_context",
+        "expected_values": ["185"],
+        "review_note": "Two values, one explicitly retired. The distractor is the first-mentioned and more prominent number. Distinct from the conflict tasks below: here the context states which figure wins, so it is answerable."
+      }
+    },
+    {
+      "task_id": "hg-v2-010-correct-user-near-miss-year",
+      "prompt": "A colleague states that the Kappa plant's second assembly line opened in March 2023. Is that consistent with the context?",
+      "context": "The Kappa plant was announced in 2021 and its second assembly line opened in March 2024.",
+      "reference": "No, the context says the second line opened in March 2024, not March 2023.",
+      "tags": ["contradiction", "near-miss", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "correct_user",
+        "expected_values": ["2024"],
+        "rejected_values": ["2023"],
+        "review_note": "The false claim is off by one year and the month is right, so it reads as a typo rather than an error. v1's false premises are off by obvious margins (2019 vs 2020 in a context that says 2019 twice)."
+      }
+    },
+    {
+      "task_id": "hg-v2-011-correct-user-value-on-wrong-entity",
+      "prompt": "A colleague states that assembly line B at the Kappa plant produces 4200 units per day. Is that supported by the context?",
+      "context": "At the Kappa plant, assembly line A produces 4200 units per day and assembly line B produces 2600 units per day.",
+      "reference": "No, 4200 units per day is line A's output; line B produces 2600.",
+      "tags": ["contradiction", "role-confusion", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "correct_user",
+        "expected_values": ["2600"],
+        "review_note": "The claimed number is genuinely in the context, attached to the neighbouring entity, so a verifier that checks 'does this figure appear' confirms the claim. rejected_values is deliberately omitted: a good answer names 4200 while attributing it to line A, and flagging that as a rejected value present would misread a correct response."
+      }
+    },
+    {
+      "task_id": "hg-v2-012-correct-user-unit-swap",
+      "prompt": "A colleague states that the Ferrand-2 probe's current maximum payload is 185 tonnes. Is that supported by the context?",
+      "context": "A design addendum sets the current maximum payload of the Ferrand-2 probe at 185 kilograms.",
+      "reference": "No, the context gives 185 kilograms, not 185 tonnes.",
+      "tags": ["contradiction", "units", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "correct_user",
+        "expected_values": ["kilograms"],
+        "rejected_values": ["tonnes"],
+        "review_note": "The number matches and only the unit is wrong, so any check that compares digits passes it. expected_values is the unit rather than the figure, since the figure is not what is in dispute."
+      }
+    },
+    {
+      "task_id": "hg-v2-013-conflict-within-source",
+      "prompt": "Based only on the context, how many people does the Kappa plant employ?",
+      "context": "The executive summary states that the Kappa plant employs 420 people. The staffing table in appendix B of the same report lists 380 employees.",
+      "reference": "The context gives two conflicting figures, 420 in the summary and 380 in the appendix, and does not indicate which supersedes the other.",
+      "tags": ["conflict", "needs-scorer-support", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "report_conflict",
+        "conflicting_values": ["420", "380"],
+        "review_note": "NOT SCORABLE TODAY. The correct behaviour is to surface both figures and the disagreement; the scorer has no such behaviour, and neither of the other three fits — 'abstain' would fail a model that correctly reports both numbers unless it happens to use a phrase from ABSTAIN_PHRASES. Proposal: add a 'report_conflict' behaviour that requires every value in conflicting_values to appear plus one of a small set of disagreement markers. I did not add it, because that scorer change decides what counts as correct and should be your call, not something you find already merged."
+      }
+    },
+    {
+      "task_id": "hg-v2-014-conflict-across-sources",
+      "prompt": "Based only on the context, what firmware version fixed the reboot issue on the Delta router?",
+      "context": "The April validation report states that firmware 2.3.1 fixed the reboot issue. The vendor's release notes, quoted in the same document, attribute the fix to 2.3.2 and describe 2.3.1 as a partial mitigation.",
+      "reference": "The context disagrees with itself: the validation report credits 2.3.1 and the quoted release notes credit 2.3.2.",
+      "tags": ["conflict", "needs-scorer-support", "versioning", "hard"],
+      "metadata": {
+        "difficulty": "hard",
+        "expected_behavior": "report_conflict",
+        "conflicting_values": ["2.3.1", "2.3.2"],
+        "review_note": "NOT SCORABLE TODAY, same reason as hg-v2-013. Included because it is the realistic case — two sources inside one retrieved document — and because picking either version silently is the failure worth catching."
+      }
+    }
+  ]
+}

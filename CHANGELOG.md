@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     conversion check. `mbpp/56` is excluded — its canonical solution recurses
     past Python's limit — and the exclusion is stated in the fixture notes.
 
+- **Draft of a harder grounding fixture, for review** —
+  `data/reliability/hallucination_grounding_v2_draft.json`, 14 tasks. Not
+  resolvable by suite name, not referenced by any config, and not run by
+  anything: v1 is at 100 % for all three models, so it cannot say which model
+  invents less, but replacing the fixture that judges the models is a decision
+  to take deliberately. Every task keeps a plausible wrong answer within reach
+  (adjacent attribute, same value on a neighbouring entity, same entity in
+  another role), and each carries a `review_note` saying what it targets. Two
+  conflicting-source tasks are marked `needs-scorer-support`: scoring them
+  needs a `report_conflict` behaviour that does not exist yet.
 - **First full MBPP results** (`METHODOLOGY.md`) — gemma-4 85.2 %, qwen-3.6
   83.1 %, nemotron-3 71.6 % over 426 problems. MBPP is 9-10 points below
   HumanEval for the top two, and n = 426 halves the intervals, so nemotron-3

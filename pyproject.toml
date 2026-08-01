@@ -27,6 +27,11 @@ llm-benchmark = "llm_benchmark.cli:shell_entrypoint"
 spark-bench = "llm_benchmark.cli:app"
 spark-benchmark = "llm_benchmark.cli:shell_entrypoint"
 
+[tool.pytest.ini_options]
+# So `pytest` works in a checkout without `pip install -e .`; CI installs the
+# package and is unaffected.
+pythonpath = ["src"]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
