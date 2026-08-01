@@ -488,6 +488,33 @@ def test_build_program_appends_the_check_invocation() -> None:
     assert program.rstrip().endswith("check(f)")
 
 
+def test_prompt_helper_functions_are_available_to_the_tests() -> None:
+    """humaneval/38's tests call encode_cyclic, which only the prompt defines.
+
+    The official harness runs prompt + completion; we run the extracted answer,
+    which contains just the target function. Without re-injecting the helper the
+    test dies with NameError and the model is blamed for a harness artefact.
+    """
+    from llm_benchmark.code_generation import load_code_generation_suite, evaluate_task
+
+    task = {t.task_id: t for t in load_code_generation_suite(REPO_ROOT).tasks}["humaneval/38"]
+    answer = task.prompt + task.metadata["canonical_solution"]
+    # Keep only decode_cyclic, i.e. drop the helper the prompt defined.
+    only_target = "def decode_cyclic" + answer.split("def decode_cyclic", 1)[1]
+    generation = GenerationResult(
+        prompt="p", output=only_target, finish_reason="stop", metrics=InferenceMetrics(), raw={}
+    )
+    outcome = evaluate_task(
+        task,
+        generations=[generation],
+        sample_seeds=[42],
+        sandbox_timeout_s=15.0,
+        sandbox_memory_mb=1024,
+    )
+
+    assert outcome.samples[0].sandbox.passed is True
+
+
 def _run_all() -> int:
     """Lightweight runner so tests work without pytest installed system-wide."""
     import inspect

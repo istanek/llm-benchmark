@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Prompt-defined helper functions were missing from the sandbox.** A few
+  HumanEval prompts define a helper above the stub (`humaneval/32` uses `poly`,
+  `humaneval/38` uses `encode_cyclic`) and the canonical tests call it. The
+  official harness runs `prompt + completion`, so the helper is always there;
+  we ran the extracted answer, which usually holds only the target function, so
+  the test died with `NameError` and the model was blamed for a harness
+  artefact. `_build_program` now re-injects any prompt-defined function the
+  answer does not redefine. This turned 2 of qwen-3.6's failures and 4 of
+  gemma-4's into passes on identical model output.
 - **The code sandbox never ran the tests it reported on.** `_build_program`
   appended the fixture's `tests` block — which only *defines*
   `check(candidate)` — and never emitted the `check(<entry_point>)` call. The

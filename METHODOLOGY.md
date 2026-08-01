@@ -167,6 +167,39 @@ Consequences worth remembering:
   would be reading noise. A harder set (or a contamination-controlled one) is
   needed for real discrimination.
 
+### Full HumanEval, corrected harness (v0.6.0, 2026-08-01)
+
+Re-run after two harness bugs were fixed: the sandbox never invoked
+`check(candidate)` (so pass@1 measured "does it parse"), and prompt-defined
+helper functions were not available to the tests. Bundle
+`20260801T013617Z-74a9a46b`, 164 problems, 1 sample, `max_tokens = 512`:
+
+| Model | pass@1 | 95 % CI | assertion | runtime | compile | wrong fn name |
+|---|---|---|---|---|---|---|
+| gemma-4 | **93.9 %** | 89-97 % | 4 | 0 | 6 | 1 |
+| qwen-3.6 | **92.1 %** | 87-95 % | 11 | 0 | 2 | 0 |
+| nemotron-3 | **74.4 %** | 67-80 % | 26 | 9 | 7 | 7 |
+
+**The suite discriminates again.** Under the broken harness all three sat at
+94-99 % and were indistinguishable; nemotron-3 in particular reported 94.5 %
+and actually scores 74.4 %. Its interval (67-80 %) does not come close to the
+other two, so that gap is real. gemma-4 and qwen-3.6 overlap heavily and
+should be treated as tied.
+
+Failure modes differ in kind, not just count. qwen-3.6 fails almost entirely
+on assertions — code that runs and returns the wrong answer. nemotron-3 fails
+across every category, including 7 tasks where it renamed the required
+function and 9 runtime errors, i.e. a share of its gap is instruction-following
+and output hygiene rather than algorithmic ability.
+
+Caveats to carry forward:
+
+- `max_tokens = 512` truncated a share of the failures (10 / 9 / 16 by model),
+  so all three numbers are floors. `code-generation.yaml` now defaults to 1536;
+  these results predate that.
+- HumanEval is in the training data of every model here. High scores should be
+  read as "not obviously broken at coding", not as a capability measurement.
+
 ### Long-context retrieval (v0.4.0 – v0.4.3, fast profile)
 
 Fast profile grid: lengths = 4 096 / 32 768 / 131 072 tokens,

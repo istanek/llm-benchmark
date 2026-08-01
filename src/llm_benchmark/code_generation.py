@@ -182,10 +182,49 @@ def _build_program(
         missing.append(stripped)
         seen.add(stripped)
     prelude = ("\n".join(missing) + "\n\n") if missing else ""
+    prelude += _prompt_helper_definitions(prompt, extracted_code, entry_point)
     invocation = f"\ncheck({entry_point})\n" if entry_point else ""
     return (
         f"{prelude}{extracted_code}\n\n# --- begin canonical tests ---\n{tests}\n{invocation}"
     )
+
+
+def _prompt_helper_definitions(prompt: str, extracted_code: str, entry_point: str) -> str:
+    """Return helper functions the prompt defines but the answer omitted.
+
+    A few HumanEval prompts (``humaneval/32`` uses ``poly``, ``humaneval/38``
+    uses ``encode_cyclic``) define a helper *above* the stub the model has to
+    complete, and the canonical tests call it. The official harness runs
+    ``prompt + completion`` so the helper is always present; we run the model's
+    extracted code, which usually contains only the target function. Without
+    this the test dies with ``NameError`` and the model is blamed for a harness
+    artefact.
+    """
+    if not prompt.strip():
+        return ""
+    lines = prompt.splitlines()
+    blocks: list[list[str]] = []
+    current: list[str] | None = None
+    for line in lines:
+        if line.startswith("def "):
+            if current:
+                blocks.append(current)
+            current = [line]
+        elif current is not None:
+            current.append(line)
+    if current:
+        blocks.append(current)
+
+    wanted: list[str] = []
+    for block in blocks:
+        name = block[0][len("def ") :].split("(")[0].strip()
+        if not name or name == entry_point:
+            continue
+        # The answer may have re-emitted the helper itself; its version wins.
+        if f"def {name}" in extracted_code:
+            continue
+        wanted.append("\n".join(block).rstrip())
+    return ("\n\n".join(wanted) + "\n\n") if wanted else ""
 
 
 def _build_preexec(mem_limit_mb: int, cpu_seconds: int) -> Any:
