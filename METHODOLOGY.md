@@ -200,6 +200,54 @@ Caveats to carry forward:
 - HumanEval is in the training data of every model here. High scores should be
   read as "not obviously broken at coding", not as a capability measurement.
 
+### First full MBPP run, and a config default that undid a fix (2026-08-01)
+
+426 sanitized MBPP problems against the same lineup, bundle
+`20260801T035913Z-e9f504d5`, 1 sample, 4 h 26 min total:
+
+| Model | MBPP pass@1 | 95 % CI | HumanEval pass@1 | 95 % CI |
+|---|---|---|---|---|
+| gemma-4 | **85.2 %** | 82-88 % | 93.9 % | 89-97 % |
+| qwen-3.6 | **83.1 %** | 79-86 % | 92.1 % | 87-95 % |
+| nemotron-3 | **71.6 %** | 67-76 % | 74.4 % | 67-80 % |
+
+**MBPP is the less saturated set.** Every model loses 9-10 points against its
+HumanEval score, except nemotron-3, which was already low. With n = 426 the
+intervals are roughly half as wide, and nemotron-3 separates cleanly from the
+other two (67-76 % vs 79-88 %); gemma-4 and qwen-3.6 still overlap and remain a
+tie. The ranking is identical across two independent sets, so nemotron-3's
+position is not an artefact of HumanEval.
+
+**This run used the wrong token budget, and the reason is worth recording.**
+`configs/experiments/code-generation.yaml` was raised to `max_tokens: 1536` the
+day before, but `scripts/run_full_code_generation.py` defaulted to
+`configs/experiments/ollama-baseline.yaml`, which still caps at 512 — so the
+fix never reached the run that needed it. A config fix is only as good as the
+default that selects the config. The runner default now points at
+`code-generation.yaml`.
+
+Truncation at 512 tokens accounted for a large share of the failures, and
+re-generating exactly those tasks at 1536 gives a corrected estimate:
+
+| Model | truncated failures | recovered at 1536 | corrected pass@1 | 95 % CI |
+|---|---|---|---|---|
+| gemma-4 | 32 of 63 | 10 | 87.6 % | 84-90 % |
+| qwen-3.6 | 20 of 72 | 11 | 85.7 % | 82-89 % |
+| nemotron-3 | 57 of 121 | 5 | 72.8 % | 68-77 % |
+
+The recovery rates matter more than the corrected scores. qwen-3.6 recovers
+11 of 20 (55 %): its truncated answers were mostly on their way to a correct
+solution. nemotron-3 recovers 5 of 57 (9 %): its long answers were long *and*
+wrong, so truncation was mostly a symptom, not the cause. The obvious reading
+of "half of nemotron's failures are truncation, so its score is badly
+understated" is therefore wrong — the gap survives the correction almost
+intact.
+
+Treat the corrected column as an upper-leaning estimate, not a measurement:
+only previously failing tasks were re-generated, so tasks that passed at 512
+had no chance to regress under a different sample. The clean full run at 1536
+supersedes it.
+
 ### Long-context retrieval (v0.4.0 – v0.4.3, fast profile)
 
 Fast profile grid: lengths = 4 096 / 32 768 / 131 072 tokens,

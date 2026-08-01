@@ -25,7 +25,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     conversion check. `mbpp/56` is excluded — its canonical solution recurses
     past Python's limit — and the exclusion is stated in the fixture notes.
 
+- **First full MBPP results** (`METHODOLOGY.md`) — gemma-4 85.2 %, qwen-3.6
+  83.1 %, nemotron-3 71.6 % over 426 problems. MBPP is 9-10 points below
+  HumanEval for the top two, and n = 426 halves the intervals, so nemotron-3
+  separates from the other two beyond doubt while gemma-4 and qwen-3.6 stay
+  tied. Includes the truncation re-check and why it does *not* rescue
+  nemotron-3.
+
 ### Fixed
+
+- **The full-run script defaulted to the wrong experiment config.**
+  `scripts/run_full_code_generation.py` used
+  `configs/experiments/ollama-baseline.yaml` (`max_tokens: 512`) rather than
+  `configs/experiments/code-generation.yaml`, where the budget had just been
+  raised to 1536 — so the 4.5 h MBPP run silently ran at the old budget and
+  truncated 32-57 answers per model mid-function. Default now points at
+  `code-generation.yaml`.
 
 - **`extract_code` dropped code defined above the entry point.** It sliced from
   `def <entry_point>`, keeping only preceding imports and decorators, so a

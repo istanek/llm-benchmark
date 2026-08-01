@@ -57,7 +57,10 @@ def log(message: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--models", nargs="+", default=DEFAULT_MODELS, help="Model config names under configs/models/.")
-    parser.add_argument("--experiment", default="configs/experiments/ollama-baseline.yaml")
+    # code-generation.yaml, not ollama-baseline.yaml: the latter caps
+    # max_tokens at 512, which truncates a large share of code answers
+    # mid-function and scores them as failures.
+    parser.add_argument("--experiment", default="configs/experiments/code-generation.yaml")
     parser.add_argument("--platform", default="configs/platforms/local.yaml")
     parser.add_argument("--backend", default="configs/backends/ollama.yaml")
     parser.add_argument(
