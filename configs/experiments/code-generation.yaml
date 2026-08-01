@@ -15,7 +15,10 @@ experiment:
     temperature: 0.0
     top_p: 1.0
     seed: 42
-    max_tokens: 512
+    # 512 truncated 16 of 20 failures on the first full HumanEval run — the
+    # models were cut off mid-function and scored as if they had written
+    # broken code. Longer problems (humaneval/32, /116) need ~1200 tokens.
+    max_tokens: 1536
   context_lengths:
     - 512
     - 4096

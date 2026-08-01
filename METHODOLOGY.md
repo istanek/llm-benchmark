@@ -124,6 +124,40 @@ list where the schema requires a string. `consistency_rate` was 100 % for
 every model, i.e. Ollama at `temperature = 0` is deterministic across
 seed-varied repetitions.
 
+### Full HumanEval, and what the token budget did to it (v0.6.0, 2026-08-01)
+
+First run of the complete 164-problem set against the v1 lineup via Ollama
+(`results/benchmarks/20260731T221321Z-9d630d4a`, 110 min total):
+
+| Model | pass@1 @ 512 tok | pass@1 @ 1536 tok | genuine failures |
+|---|---|---|---|
+| qwen-3.6 | 98.8 % (CI 96-100) | **100 %** (CI 98-100) | 0 |
+| gemma-4 | 94.5 % (CI 90-97) | **97.0 %** (CI 93-99) | 5 |
+| nemotron-3 | 94.5 % (CI 90-97) | **96.3 %** (CI 92-98) | 6 |
+
+**16 of the 20 failures were the token budget, not the models.** Every one
+stopped at exactly 512 decode tokens, mid-function, and the sandbox reported
+the resulting `SyntaxError` as `compile_error` — indistinguishable, in the
+summary, from a model that writes broken code. Re-running only those tasks at
+1536 tokens recovered 9 of 16 (qwen 2/2, gemma 4/8, nemotron 3/6); the rest
+failed again well under the new budget, so those are real.
+
+Consequences worth remembering:
+
+- **The ranking changed shape.** At 512 tokens gemma-4 and nemotron-3 tie
+  exactly; at 1536 they separate slightly, and qwen-3.6 goes from "nearly
+  perfect" to unblemished. A budget that is too small penalises verbose models
+  specifically, which is a property of their output style, not their coding.
+- `configs/experiments/code-generation.yaml` now sets `max_tokens: 1536`. The
+  1536-token column above comes from a targeted re-run of the truncated tasks
+  only, so treat it as a corrected estimate — a clean full run at the new
+  budget has not been done yet.
+- HumanEval is saturated for this class of model. With every model at 96-100 %
+  and intervals overlapping, this suite no longer separates them; the honest
+  read is "all three solve essentially all of HumanEval". Ranking them on it
+  would be reading noise. A harder set (or a contamination-controlled one) is
+  needed for real discrimination.
+
 ### Long-context retrieval (v0.4.0 – v0.4.3, fast profile)
 
 Fast profile grid: lengths = 4 096 / 32 768 / 131 072 tokens,

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`code-generation.yaml` raises `max_tokens` from 512 to 1536.** The first
+  full HumanEval run showed 16 of 20 failures across three models were
+  generations cut off at exactly 512 decode tokens, not wrong answers; the
+  longest problems need ~1200. See METHODOLOGY.md for the corrected pass@1
+  table and what the small budget did to the ranking.
+
 ### Fixed
 
 - **Ollama truncation was invisible.** `OllamaAdapter` mapped every completed
