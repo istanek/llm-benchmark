@@ -517,7 +517,13 @@ def run(
                 repetitions=experiment_spec.repetitions,
                 warmup_runs=experiment_spec.warmup_runs,
             )
-        elif run_suite in {"code_generation", "code_generation_v1"}:
+        elif run_suite in {
+            "code_generation",
+            "code_generation_v1",
+            "code_generation_mbpp",
+            "code_generation_mbpp_v1",
+            "mbpp",
+        }:
             summary = run_code_generation_suite(
                 run_dir=run_dir,
                 suite=suite,

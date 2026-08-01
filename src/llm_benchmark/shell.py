@@ -72,8 +72,12 @@ SUITE_REGISTRY: dict[str, dict[str, str]] = {
         "data_path": "data/practical/practical_structured_output_v1.json",
     },
     "code_generation": {
-        "label": "Code generation (HumanEval starter)",
+        "label": "Code generation (HumanEval, 164 problems)",
         "data_path": "data/code/code_generation_v1.json",
+    },
+    "code_generation_mbpp": {
+        "label": "Code generation (MBPP sanitized, 426 problems)",
+        "data_path": "data/code/code_generation_mbpp_v1.json",
     },
     "sustained_throughput": {
         "label": "Sustained throughput (5-min thermal / decode soak)",

@@ -33,6 +33,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from llm_benchmark.code_generation import (  # noqa: E402
     default_reference_scores_path,
     load_code_generation_suite,
+    load_mbpp_suite,
     run_code_generation_suite,
 )
 from llm_benchmark.config import (  # noqa: E402
@@ -59,6 +60,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--experiment", default="configs/experiments/ollama-baseline.yaml")
     parser.add_argument("--platform", default="configs/platforms/local.yaml")
     parser.add_argument("--backend", default="configs/backends/ollama.yaml")
+    parser.add_argument(
+        "--benchmark",
+        choices=["humaneval", "mbpp"],
+        default="humaneval",
+        help="Which code fixture to run (humaneval: 164 problems, mbpp: 426).",
+    )
     parser.add_argument("--task-limit", type=int, default=None, help="Run only the first N problems (smoke check).")
     parser.add_argument("--samples", type=int, default=1, help="Samples per task; >1 enables pass@k.")
     parser.add_argument("--output-dir", default=None, help="Reuse an existing bundle directory to resume.")
@@ -71,7 +78,7 @@ def main() -> int:
     experiment = load_experiment(REPO_ROOT / args.experiment).experiment
     platform_config = load_platform(REPO_ROOT / args.platform)
     backend_config = load_backend(REPO_ROOT / args.backend)
-    suite = load_code_generation_suite(REPO_ROOT)
+    suite = load_mbpp_suite(REPO_ROOT) if args.benchmark == "mbpp" else load_code_generation_suite(REPO_ROOT)
 
     bundle = Path(args.output_dir) if args.output_dir else REPO_ROOT / "results/benchmarks" / make_run_id()
     bundle.mkdir(parents=True, exist_ok=True)
@@ -86,7 +93,7 @@ def main() -> int:
     started = time.time()
     results: dict[str, float | None] = {}
     for index, model_name in enumerate(args.models, start=1):
-        run_dir = bundle / f"code_generation-{model_name}"
+        run_dir = bundle / f"code_generation_{args.benchmark}-{model_name}"
         summary_path = run_dir / "summary.json"
         if summary_path.exists() and not args.force:
             log(f"[{index}/{len(args.models)}] {model_name}: summary.json exists, skipping (use --force to redo)")
@@ -135,7 +142,7 @@ def main() -> int:
     write_report(bundle / "report.md", "both", aggregate)
     log(f"report: {bundle / 'report.md'} and report.html")
 
-    print("\nmeasured pass@1 (HumanEval):")
+    print(f"\nmeasured pass@1 ({args.benchmark}):")
     for model_name, value in results.items():
         rendered = "failed" if value is None else f"{value:.1%}"
         print(f"  {model_name:16} {rendered}")
@@ -152,7 +159,7 @@ def _pass_at_1(summary: dict, model_name: str) -> float | None:
         if model.get("model") != model_name:
             continue
         for benchmark in model.get("benchmarks") or []:
-            if benchmark.get("benchmark") == "humaneval":
+            if benchmark.get("benchmark") in {"humaneval", "mbpp_sanitized"}:
                 return benchmark.get("pass_at_1")
     return None
 

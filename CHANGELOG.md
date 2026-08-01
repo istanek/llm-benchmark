@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **MBPP sanitized as a second code benchmark** —
+  `data/code/code_generation_mbpp_v1.json`, 426 problems from
+  google-research/google-research (CC BY 4.0). HumanEval is saturated for this
+  class of model (94-99 % before the harness fixes, 74-94 % after) and is in
+  everyone's training data, so a second, larger set gives an independent read
+  and tighter intervals. Tasks carry `metadata.benchmark = "mbpp_sanitized"`,
+  matching the entries `reference_scores.yaml` has always had.
+  - Wired through the suite-name resolver, bundle dispatch, TUI registry, the
+    `run` CLI, and `scripts/run_full_code_generation.py --benchmark mbpp`.
+  - MBPP prompts are prose, so each prompt embeds the first assert to pin the
+    signature the tests expect. That is standard for MBPP and is part of the
+    measurement: the model is asked to match a given signature, not invent one.
+  - All 426 canonical solutions execute through this repo's sandbox as a
+    conversion check. `mbpp/56` is excluded — its canonical solution recurses
+    past Python's limit — and the exclusion is stated in the fixture notes.
+
+### Fixed
+
+- **`extract_code` dropped code defined above the entry point.** It sliced from
+  `def <entry_point>`, keeping only preceding imports and decorators, so a
+  model that writes a helper function or a module-level constant above the
+  target function had them cut away and the tests died with `NameError` —
+  scored as the model's failure. Extraction now starts at the first top-level
+  construct (`def` / `class` / `import` / `@` / assignment). Found while
+  validating the MBPP conversion, where it accounted for 9 of 12 canonical
+  solutions failing; 426/427 pass after the fix. HumanEval results are
+  unchanged, since those answers are usually fenced and take a different path.
+
 ## [0.6.1] - 2026-08-01
 
 ### Added

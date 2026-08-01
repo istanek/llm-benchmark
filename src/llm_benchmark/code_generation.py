@@ -113,6 +113,9 @@ def pass_at_k(n: int, c: int, k: int) -> float:
 _CODE_FENCE_RE = re.compile(r"```(?:python|py)?\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
 
 
+_TOP_LEVEL_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_]\w*\s*(?::[^=]+)?=\s*\S")
+
+
 def extract_code(output: str, prompt: str, entry_point: str) -> str:
     """Best-effort extraction of executable code from a model output.
 
@@ -121,8 +124,10 @@ def extract_code(output: str, prompt: str, entry_point: str) -> str:
          contents — imports and decorators that precede ``def`` must be
          preserved or the sandbox blows up on ``NameError``.
       2. If there is no fence but ``def <entry_point>`` is present, slice
-         from that line while keeping any preceding ``import`` / ``from``
-         lines so type aliases like ``List`` stay defined.
+         from the first top-level code construct — not from the entry point
+         itself. Answers routinely define a helper *above* the target
+         function, and slicing at the entry point dropped it, so the tests
+         died with ``NameError`` and the model was blamed for it.
       3. Otherwise treat the output as a raw continuation and prepend the
          original prompt.
     """
@@ -133,19 +138,16 @@ def extract_code(output: str, prompt: str, entry_point: str) -> str:
         return fence_match.group(1)
 
     def_marker = f"def {entry_point}"
-    def_index = candidate.find(def_marker)
-    if def_index != -1:
-        before = candidate[:def_index]
-        prelude_lines: list[str] = []
-        for line in before.splitlines()[::-1]:
-            stripped = line.strip()
-            if stripped == "" or stripped.startswith(("import ", "from ", "@", "#")):
-                prelude_lines.append(line)
-                continue
-            break
-        prelude = "\n".join(reversed(prelude_lines)).rstrip()
-        body = candidate[def_index:]
-        return f"{prelude}\n{body}" if prelude else body
+    if def_marker in candidate:
+        lines = candidate.splitlines()
+        for index, line in enumerate(lines):
+            # First column only: prose can mention "def" mid-sentence.
+            if line.startswith(("def ", "class ", "import ", "from ", "@")):
+                return "\n".join(lines[index:])
+            # Module-level constants (NO_OF_CHARS = 256) are referenced from
+            # inside the function and must not be sliced away either.
+            if _TOP_LEVEL_ASSIGNMENT_RE.match(line):
+                return "\n".join(lines[index:])
 
     # Treat as a continuation of the canonical prompt.
     return prompt + candidate
@@ -743,6 +745,16 @@ def run_code_generation_suite(
 
 def load_code_generation_suite(repo_root: Path) -> SuiteDefinition:
     return load_suite_definition(repo_root / "data" / "code" / "code_generation_v1.json")
+
+
+def load_mbpp_suite(repo_root: Path) -> SuiteDefinition:
+    """MBPP sanitized — a second, less saturated code benchmark.
+
+    Same runner and scoring as HumanEval; the tasks carry
+    ``metadata.benchmark = "mbpp_sanitized"`` so results aggregate separately
+    and line up with the entries already present in reference_scores.yaml.
+    """
+    return load_suite_definition(repo_root / "data" / "code" / "code_generation_mbpp_v1.json")
 
 
 def default_reference_scores_path(repo_root: Path) -> Path:

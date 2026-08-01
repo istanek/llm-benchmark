@@ -20,7 +20,11 @@ exhaustive checking belongs in the conversion script, which already runs all
 
 from pathlib import Path
 
-from llm_benchmark.code_generation import evaluate_task, load_code_generation_suite
+from llm_benchmark.code_generation import (
+    evaluate_task,
+    load_code_generation_suite,
+    load_mbpp_suite,
+)
 from llm_benchmark.models import GenerationResult, InferenceMetrics
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -30,14 +34,23 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_STRIDE = 12
 
 
+def _all_fixture_tasks():
+    return load_code_generation_suite(REPO_ROOT).tasks + load_mbpp_suite(REPO_ROOT).tasks
+
+
 def _tasks():
-    tasks = load_code_generation_suite(REPO_ROOT).tasks
+    tasks = load_code_generation_suite(REPO_ROOT).tasks + load_mbpp_suite(REPO_ROOT).tasks
     sample = tasks[::SAMPLE_STRIDE]
     # humaneval/32 (poly) and /38 (encode_cyclic) define helpers in the prompt;
     # pin them explicitly so the sample can never drift off them.
     by_id = {t.task_id: t for t in tasks}
     for task_id in ("humaneval/32", "humaneval/38"):
         if by_id[task_id] not in sample:
+            sample.append(by_id[task_id])
+    # mbpp/6 and mbpp/18 need a helper function and a module-level constant
+    # that precede the entry point — the case extract_code used to slice away.
+    for task_id in ("mbpp/6", "mbpp/18"):
+        if task_id in by_id and by_id[task_id] not in sample:
             sample.append(by_id[task_id])
     return sample
 
@@ -90,7 +103,7 @@ def test_every_task_declares_what_the_sandbox_needs() -> None:
     """A task missing entry_point or tests would raise mid-run, not at load."""
     missing = [
         t.task_id
-        for t in load_code_generation_suite(REPO_ROOT).tasks
+        for t in _all_fixture_tasks()
         if not t.metadata.get("entry_point") or not t.metadata.get("tests")
     ]
     assert not missing, f"tasks missing entry_point/tests metadata: {missing}"

@@ -107,6 +107,8 @@ def fixture_path_for_suite_name(repo_root: Path, suite_name: str) -> Path:
         return repo_root / "data" / "performance" / "openclaw_speed_v1.json"
     if suite_name in {"code_generation", "code_generation_v1"}:
         return repo_root / "data" / "code" / "code_generation_v1.json"
+    if suite_name in {"code_generation_mbpp", "code_generation_mbpp_v1", "mbpp"}:
+        return repo_root / "data" / "code" / "code_generation_mbpp_v1.json"
     if suite_name in {"sustained_throughput", "sustained_throughput_v1"}:
         return repo_root / "data" / "performance" / "sustained_throughput_v1.json"
     if suite_name in {
