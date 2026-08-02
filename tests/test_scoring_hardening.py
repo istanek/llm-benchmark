@@ -6,6 +6,8 @@ wrongly, so a future rewrite of the scorers cannot quietly reintroduce it.
 
 from pathlib import Path
 
+import pytest
+
 from llm_benchmark.config import load_backend
 from llm_benchmark.models import GenerationResult, InferenceMetrics, ModelConfig, SamplingConfig
 from llm_benchmark.orchestration import load_openclaw_speed_suite, run_openclaw_speed_suite
@@ -757,3 +759,93 @@ def test_burying_the_second_value_is_still_a_failure() -> None:
     result = score_hallucination_task(task, answer)
     assert result["passed"] is False
     assert result["reason"] == "conflict_not_named"
+
+
+# --------------------------------------------------------------------- #
+# Non-English answers are unscorable, not wrong                          #
+# --------------------------------------------------------------------- #
+#
+# Every phrase list in the scorer is English, so a refusal in another language
+# scores as a hallucination — a verdict about the scorer's vocabulary dressed
+# as a result about the model. Nothing in the lineup answers in another
+# language today, which is exactly how the previous version of this problem
+# stayed hidden for a week.
+
+
+def _abstain_task():
+    from llm_benchmark.suites import SuiteTask
+
+    return SuiteTask(
+        task_id="abstain",
+        prompt="Who was the lead engineer?",
+        context="Atlas-3 was assembled in 2018 and launched in 2019.",
+        reference="The context does not mention the lead engineer.",
+        metadata={"expected_behavior": "abstain"},
+    )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Kontext neuvádí, kdo byl vedoucí inženýr projektu.",
+        "Der Kontext nennt den leitenden Ingenieur nicht.",
+        "El contexto no menciona al ingeniero principal.",
+        "В контексте не указан ведущий инженер.",
+        "文脈にはリード エンジニアが記載されていません",
+    ],
+)
+def test_a_refusal_in_another_language_is_unscorable(answer: str) -> None:
+    from llm_benchmark.reliability import score_hallucination_task
+
+    result = score_hallucination_task(_abstain_task(), answer)
+    assert result["unscorable"] is True
+    assert result["reason"].startswith("non_english_output:")
+
+
+def test_an_english_failure_stays_a_failure() -> None:
+    """Unscorable is for answers the scorer cannot read, not for wrong ones."""
+    from llm_benchmark.reliability import score_hallucination_task
+
+    result = score_hallucination_task(_abstain_task(), "The lead engineer was Novak.")
+    assert result["unscorable"] is False
+    assert result["passed"] is False
+
+
+def test_a_passing_answer_is_never_marked_unscorable() -> None:
+    """The check runs only on failures, so it cannot reclassify a pass."""
+    from llm_benchmark.reliability import score_hallucination_task
+
+    result = score_hallucination_task(_abstain_task(), "The context does not mention the lead engineer.")
+    assert result["passed"] is True
+    assert result["unscorable"] is False
+
+
+def test_a_short_answer_is_not_guessed_at() -> None:
+    """"2019" and "Dvorak" have no function words in any language. Guessing
+    from them would be worse than not guessing."""
+    from llm_benchmark.reliability import looks_english
+
+    for answer in ("2019", "Dvorak", "Ostrava"):
+        assert looks_english(answer) is True
+
+
+def test_unscorable_rows_leave_the_denominator() -> None:
+    """Scoring them zero would state the model got the task wrong. What was
+    observed is that this scorer cannot read the answer."""
+    from llm_benchmark.models import BackendConfig
+    from llm_benchmark.reliability import build_summary
+    from llm_benchmark.suites import SuiteDefinition
+
+    rows = [
+        {"model": "m", "task_id": "t1", "evaluation": {"score": 1, "passed": True, "unscorable": False}},
+        {"model": "m", "task_id": "t2", "evaluation": {"score": 0, "passed": False, "unscorable": False}},
+        {"model": "m", "task_id": "t3", "evaluation": {"score": 0, "passed": False, "unscorable": True}},
+    ]
+    suite = SuiteDefinition(name="s", category="reliability", version="0.1.0")
+    backend = BackendConfig(name="ollama", entrypoint="ollama", version="test")
+    summary = build_summary(rows, suite, backend)
+    model = summary["models"][0]
+    assert (model["passes"], model["total"]) == (1, 2)
+    assert model["pass_rate"] == 0.5
+    assert model["unscorable"] == 1
+    assert model["unscorable_task_ids"] == ["t3"]

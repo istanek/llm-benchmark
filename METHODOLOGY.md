@@ -111,12 +111,16 @@ constants:
 
 Two assumptions remain and are known limits rather than fixed problems:
 
-- **The grounding scorer is still a list of English phrases**, though a longer
-  and better-behaved one since 2026-08-02 (see below). A refusal worded outside
-  `ABSTAIN_PHRASES`, or written in another language, still scores as a
-  hallucination. Every model measured so far answers in English, so this is a
-  latent problem rather than an observed one — which is exactly how the
-  previous version of it stayed hidden.
+- **The grounding scorer is a list of English phrases**, longer and
+  better-behaved since 2026-08-02. A refusal worded outside `ABSTAIN_PHRASES`
+  still scores as a hallucination, so the list remains a source of false
+  negatives for any model whose register differs from the lineup's.
+  A refusal in **another language** no longer does: an answer that fails and
+  is not English is marked `unscorable` and leaves the denominator instead of
+  counting as a wrong answer. Scoring it zero would state that the model got
+  the task wrong, when what was observed is that this scorer cannot read the
+  answer. Detection is function-word density plus script, no dependencies; it
+  runs only on answers that already failed, so it cannot reclassify a pass.
 - **Prompts go to Ollama's `/api/generate` raw**, so the chat template comes
   from the model's Modelfile. The same model served through the
   openai-compatible backend is not template-identical, and cross-backend

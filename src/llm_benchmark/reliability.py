@@ -249,6 +249,64 @@ def build_structured_output_prompt(task: SuiteTask) -> str:
     )
 
 
+# Function words carry the grammar of a language rather than its content, so
+# their density is a cheap and stable language signal — far more robust than
+# looking for content words, which a technical answer may not have.
+# Words shared with other languages are deliberately absent: "no" and "a" are
+# Spanish, "in" and "an" German, "on" French. Keeping "no" made
+# "El contexto no menciona al ingeniero principal" read as English on a single
+# token. What is left is either English-only or rare enough elsewhere not to
+# reach the threshold on its own.
+ENGLISH_FUNCTION_WORDS = frozenset(
+    {
+        "the", "is", "are", "was", "were", "be", "been", "does", "did", "not",
+        "and", "but", "of", "to", "for", "from", "with", "that", "this",
+        "these", "those", "it", "its", "as", "by", "there", "which", "who",
+        "what", "when", "only", "any", "says", "said", "state", "states",
+        "mention", "mentions", "mentioned", "according", "context", "would",
+        "should", "cannot", "does", "do", "have", "has", "had",
+    }
+)
+
+# Below this share of function words, in an answer long enough for the ratio to
+# mean anything, the text is not English.
+ENGLISH_FUNCTION_WORD_FLOOR = 0.12
+# Six, not eight: a typical refusal in Czech or German runs to seven tokens
+# ("Der Kontext nennt den leitenden Ingenieur nicht"), and a threshold above
+# that let every short non-English answer through as English.
+MIN_TOKENS_FOR_LANGUAGE_CHECK = 6
+
+
+def looks_english(text: str) -> bool:
+    """Cheap, dependency-free check that an answer is written in English.
+
+    Two signals, either of which is enough to say "not English":
+
+    1. **Script.** A fifth or more of the letters outside Latin — Cyrillic,
+       Greek, CJK, Arabic — settles it without needing vocabulary.
+    2. **Function-word density.** Latin-script languages need the ratio test:
+       Czech or German prose contains almost none of the words above, while
+       English prose is a third of them.
+
+    Short answers are treated as English by default. "2019" and "Dvorak" have
+    no function words in any language, and guessing from them would be worse
+    than not guessing.
+    """
+    letters = [char for char in text if char.isalpha()]
+    if letters:
+        # Beyond Latin Extended-B. Diacritics on Latin letters do not count:
+        # "Dvořák" is a Czech name in an English sentence often enough.
+        non_latin = sum(1 for char in letters if ord(char) > 0x024F)
+        if non_latin / len(letters) >= 0.2:
+            return False
+
+    tokens = re.findall(r"[^\W\d_]+", text.lower(), flags=re.UNICODE)
+    if len(tokens) < MIN_TOKENS_FOR_LANGUAGE_CHECK:
+        return True
+    hits = sum(1 for token in tokens if token in ENGLISH_FUNCTION_WORDS)
+    return hits / len(tokens) >= ENGLISH_FUNCTION_WORD_FLOOR
+
+
 def normalize_text(value: str) -> str:
     """Fold away the ways a correct answer can be written differently.
 
@@ -412,8 +470,19 @@ def score_hallucination_task(
     if not passed and truncated:
         reason = f"{reason}+truncated_output"
 
+    # Only failures are language-checked, so this can never turn a pass into
+    # something else. Every phrase list in this module is English, so a refusal
+    # written in another language scores as a hallucination — a verdict about
+    # the scorer's vocabulary wearing the costume of a result. Marking it
+    # unscorable follows the rule the portability probe already applies: a bad
+    # score is a result, an unscorable output is not a measurement.
+    unscorable = not passed and not looks_english(output)
+    if unscorable:
+        reason = f"non_english_output:{reason}"
+
     return {
         "expected_behavior": behavior,
+        "unscorable": unscorable,
         "passed": passed,
         "score": 1 if passed else 0,
         "reason": reason,
@@ -500,8 +569,24 @@ def build_summary(
         model_name = row["model"]
         bucket = per_model.setdefault(
             model_name,
-            {"model": model_name, "passes": 0, "total": 0, "failed_task_ids": []},
+            {
+                "model": model_name,
+                "passes": 0,
+                "total": 0,
+                "unscorable": 0,
+                "unscorable_task_ids": [],
+                "failed_task_ids": [],
+            },
         )
+        # An unscorable row leaves the denominator rather than counting as a
+        # failure. Scoring it 0 would state that the model got the task wrong,
+        # which is not what was observed — what was observed is that this
+        # scorer cannot read the answer.
+        if row["evaluation"].get("unscorable"):
+            bucket["unscorable"] += 1
+            if row["task_id"] not in bucket["unscorable_task_ids"]:
+                bucket["unscorable_task_ids"].append(row["task_id"])
+            continue
         bucket["passes"] += int(row["evaluation"]["score"])
         bucket["total"] += 1
         passed = bool(row["evaluation"]["passed"])

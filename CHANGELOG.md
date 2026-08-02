@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Non-English answers are `unscorable`, not failures.** Every phrase list in
+  the grounding scorer is English, so a correct refusal in Czech, German,
+  Spanish, Russian or Japanese scored as a hallucination — a verdict about the
+  scorer's vocabulary wearing the costume of a result. Such rows now leave the
+  denominator and are reported separately in both the summary and the report.
+  Detection is function-word density plus script detection, stdlib only, and
+  runs only on answers that already failed, so it cannot reclassify a pass.
+  Short answers ("2019", "Dvorak") are never guessed at. Follows the rule the
+  portability probe already applies: a bad score is a result, an unscorable
+  output is not a measurement.
 - **`scripts/paired_compare.py`** — McNemar's exact test on per-task outcomes,
   plus a paired bootstrap CI and the task-level flip lists. Every model answers
   the same fixture, and comparing marginal Wilson intervals throws that away:

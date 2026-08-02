@@ -185,6 +185,12 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
                 "consistency_rate",
                 "unstable_task_ids",
                 "truncated_rows",
+                # Answers this scorer could not read (non-English today).
+                # Excluded from the pass rate, so the report has to say how
+                # many there were — a denominator that shrank silently is a
+                # pass rate nobody can check.
+                "unscorable",
+                "unscorable_task_ids",
                 # Per-window throughput series (sustained_throughput) — used
                 # by the HTML renderer to draw a tps-over-time line chart.
                 # Discarded by the markdown / CLI summaries since they only
@@ -435,6 +441,15 @@ def render_markdown_report(aggregate: dict[str, Any]) -> str:
             lines.append("")
             lines.append("_Timing probe — pass/fail is not scored; read the latency and throughput columns._")
         lines.extend(_verbosity_markdown(suite))
+        unscorable_total = sum(int(m.get("unscorable") or 0) for m in suite["models"])
+        if unscorable_total:
+            lines.append("")
+            lines.append(
+                f"_{unscorable_total} answer(s) could not be scored — not written in English, so "
+                "every phrase list in the scorer misses them. They are excluded from the rates "
+                "above rather than counted as failures: a bad score is a result, an unreadable "
+                "answer is not a measurement._"
+            )
         truncated_total = sum(int(m.get("truncated") or 0) for m in suite["models"])
         if truncated_total:
             lines.append("")
