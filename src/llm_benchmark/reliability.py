@@ -103,6 +103,25 @@ CONFLICT_PHRASES = (
     "does not match",
     "do not match",
     "not consistent",
+    # Contrastive conjunctions. Setting the two values against each other is
+    # reporting the disagreement — "the summary states 420, *while* appendix B
+    # lists 380" leaves a reader in no doubt that the source is at odds with
+    # itself. Requiring the word "conflict" scored that identically to
+    # nemotron-3's "the context states 2.3.1 (it *also* notes 2.3.2)", which
+    # presents one value as the answer and buries the other. Those are
+    # different behaviours and the suite should tell them apart.
+    #
+    # These words are common, so they only count here: the behaviour already
+    # requires every conflicting value to be present before the marker is
+    # consulted.
+    "but",
+    "while",
+    "whereas",
+    "however",
+    "although",
+    "though",
+    "on the other hand",
+    "in contrast",
 )
 
 # Markers of a guess bolted onto an abstention ("the context doesn't say, but it
@@ -172,7 +191,14 @@ _STOPWORDS = frozenset(
 def fixture_path_for_suite_name(repo_root: Path, suite_name: str) -> Path:
     if suite_name in {"hallucination_grounding", "hallucination_grounding_v1"}:
         return repo_root / "data" / "reliability" / "hallucination_grounding_v1.json"
-    if suite_name in {"hallucination_grounding_v2", "grounding_v2"}:
+    # ``hallucination_grounding_v2_draft`` is the fixture's own name, which is
+    # what lands in summary.json — re-scoring a finished bundle resolves the
+    # suite by that string, so it has to be an accepted alias.
+    if suite_name in {
+        "hallucination_grounding_v2",
+        "hallucination_grounding_v2_draft",
+        "grounding_v2",
+    }:
         return repo_root / "data" / "reliability" / "hallucination_grounding_v2_draft.json"
     if suite_name in {"practical_structured_output", "practical_structured_output_v1"}:
         return repo_root / "data" / "practical" / "practical_structured_output_v1.json"

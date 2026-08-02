@@ -39,7 +39,13 @@ from llm_benchmark.code_generation import (  # noqa: E402
     load_mbpp_mutated_suite,
     load_mbpp_suite,
 )
-from llm_benchmark.models import GenerationResult, HarnessProvenance  # noqa: E402
+from llm_benchmark.models import BackendConfig, GenerationResult, HarnessProvenance  # noqa: E402
+from llm_benchmark.reliability import (  # noqa: E402
+    build_summary,
+    load_reliability_suite,
+    score_hallucination_task,
+    score_structured_output_task,
+)
 from llm_benchmark.provenance import collect_provenance  # noqa: E402
 from llm_benchmark.reporting import aggregate_runs, write_report  # noqa: E402
 from llm_benchmark.results_bundle import write_json  # noqa: E402
@@ -57,6 +63,66 @@ def load_tasks(suite_name: str) -> dict[str, Any]:
     else:
         loader = load_code_generation_suite
     return {task.task_id: task for task in loader(REPO_ROOT).tasks}
+
+
+# Suites this tool can re-score: those whose verdict is a pure function of the
+# stored answer. Long-context is deliberately absent — its scoring depends on
+# how the haystack was assembled at generation time, which is not recoverable
+# from the row, so re-scoring it would be guessing rather than recomputing.
+RELIABILITY_SUITES = ("hallucination_grounding", "practical_structured_output")
+
+
+def rescore_reliability_run(run_dir: Path, out_dir: Path, suite_name: str) -> dict[str, Any] | None:
+    """Re-score a grounding or structured-output run from its stored answers.
+
+    Same argument as the code path: the scorer is offline and deterministic,
+    and the model saw nothing that depends on it. A grounding scorer fix — of
+    which there have been several — should not cost another pass over the
+    models.
+    """
+    results_path = run_dir / "results.jsonl"
+    summary_path = run_dir / "summary.json"
+    if not results_path.exists() or not summary_path.exists():
+        return None
+    rows = [json.loads(line) for line in results_path.read_text().splitlines() if line.strip()]
+    if not rows:
+        return None
+
+    old_summary = json.loads(summary_path.read_text())
+    suite = load_reliability_suite(REPO_ROOT, suite_name)
+    tasks = {task.task_id: task for task in suite.tasks}
+    structured = "structured" in suite_name
+    score = score_structured_output_task if structured else score_hallucination_task
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    new_rows: list[dict[str, Any]] = []
+    before = after = 0
+    for row in rows:
+        task = tasks.get(row["task_id"])
+        before += int(bool((row.get("evaluation") or {}).get("passed")))
+        if task is None:
+            new_rows.append(row)
+            continue
+        generation = row.get("generation") or {}
+        evaluation = score(task, generation.get("output", ""), generation.get("finish_reason"))
+        after += int(bool(evaluation["passed"]))
+        new_rows.append({**row, "evaluation": evaluation})
+
+    (out_dir / "results.jsonl").write_text(
+        "\n".join(json.dumps(row, ensure_ascii=False) for row in new_rows) + "\n"
+    )
+    backend = BackendConfig.model_validate(
+        json.loads((run_dir / "manifest.json").read_text())["backend"]
+    )
+    write_json(out_dir / "summary.json", build_summary(new_rows, suite, backend))
+    models = sorted({row["model"] for row in new_rows})
+    return {
+        "run": run_dir.name,
+        "model": models[0] if len(models) == 1 else f"{len(models)} models",
+        "before": before,
+        "after": after,
+        "total": len(rows),
+    }
 
 
 def rescore_run(run_dir: Path, out_dir: Path) -> dict[str, Any] | None:
@@ -162,12 +228,27 @@ def main() -> int:
 
     source_commits: set[str] = set()
     records: list[dict[str, Any]] = []
+    skipped: list[str] = []
     scorer = collect_provenance(REPO_ROOT)
 
     for run_dir in sorted(p for p in bundle.iterdir() if p.is_dir()):
         manifest_path = run_dir / "manifest.json"
         manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
-        record = rescore_run(run_dir, out_bundle / run_dir.name)
+        summary_path = run_dir / "summary.json"
+        declared = (
+            json.loads(summary_path.read_text()).get("suite", "") if summary_path.exists() else ""
+        )
+        if any(name in declared for name in RELIABILITY_SUITES):
+            record = rescore_reliability_run(run_dir, out_bundle / run_dir.name, declared)
+        elif "code_generation" in declared:
+            record = rescore_run(run_dir, out_bundle / run_dir.name)
+        else:
+            # Copied verbatim rather than dropped: a bundle that silently loses
+            # a suite on re-scoring would misrepresent what was measured.
+            record = None
+            if summary_path.exists():
+                shutil.copytree(run_dir, out_bundle / run_dir.name, dirs_exist_ok=True)
+                skipped.append(declared or run_dir.name)
         if record is None:
             continue
         records.append(record)
@@ -202,6 +283,9 @@ def main() -> int:
             f"{record['model']:16s} {record['before']:>4d}/{record['total']:<5d} "
             f"{record['after']:>4d}/{record['total']:<5d} {delta:>+8d}"
         )
+    if skipped:
+        print()
+        print(f"copied unchanged (not re-scorable offline): {', '.join(sorted(set(skipped)))}")
     print()
     print(f"generations from {bundle.name} ({', '.join(sorted(source_commits)) or 'no commit recorded'})")
     print(f"scored by        {scorer.git_commit}{' (DIRTY TREE)' if scorer.git_dirty else ''}")

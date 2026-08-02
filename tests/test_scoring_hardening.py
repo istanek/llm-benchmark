@@ -720,3 +720,40 @@ def test_a_fixture_can_still_veto_a_fabricated_value_after_abstaining() -> None:
     result = score_hallucination_task(task, "The context does not say directly, but it was 2022.")
     assert result["passed"] is False
     assert "fabricated_value_after_abstention" in result["reason"]
+
+
+def test_contrasting_the_two_values_counts_as_reporting_the_conflict() -> None:
+    """gemma-4's real answer. It sets the figures against each other, which
+    leaves no doubt the source disagrees with itself."""
+    from llm_benchmark.reliability import score_hallucination_task
+
+    answer = (
+        "The executive summary states that the Kappa plant employs 420 people, "
+        "while the staffing table in appendix B lists 380 employees."
+    )
+    assert score_hallucination_task(_conflict_task(), answer)["passed"] is True
+
+
+def test_burying_the_second_value_is_still_a_failure() -> None:
+    """nemotron-3's real answer on the same shape of task. One figure is given
+    as the answer and the other is parenthetical — additive, not contrastive.
+    This is the behaviour report_conflict exists to catch, and loosening the
+    markers must not rescue it."""
+    from llm_benchmark.reliability import score_hallucination_task
+    from llm_benchmark.suites import SuiteTask
+
+    task = SuiteTask(
+        task_id="conflict-firmware",
+        prompt="Which firmware fixed the reboot issue?",
+        context="The report credits 2.3.1. The vendor's notes credit 2.3.2.",
+        reference="The context disagrees with itself.",
+        metadata={"expected_behavior": "report_conflict", "conflicting_values": ["2.3.1", "2.3.2"]},
+    )
+    answer = (
+        "The context states that firmware 2.3.1 fixed the reboot issue. "
+        "(It also notes that the vendor's release notes attribute the fix to 2.3.2 "
+        "and describe 2.3.1 as a partial mitigation.)"
+    )
+    result = score_hallucination_task(task, answer)
+    assert result["passed"] is False
+    assert result["reason"] == "conflict_not_named"
