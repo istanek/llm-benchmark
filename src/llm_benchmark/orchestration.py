@@ -28,6 +28,7 @@ from llm_benchmark.models import BackendConfig, GenerationResult, ModelConfig, S
 from llm_benchmark.results_bundle import write_json, write_manifest, write_result
 from llm_benchmark.reliability import (
     build_summary,
+    fixture_path_for_suite_name,
     run_hallucination_grounding_suite,
     run_practical_structured_output_suite,
     sampling_for_repetition,
@@ -233,8 +234,8 @@ def run_benchmark_bundle(
         )
         write_manifest(suite_dir, manifest)
 
-        if suite_name == "hallucination_grounding":
-            suite = load_suite_definition(repo_root / "data" / "reliability" / "hallucination_grounding_v1.json")
+        if suite_name in {"hallucination_grounding", "hallucination_grounding_v2"}:
+            suite = load_suite_definition(fixture_path_for_suite_name(repo_root, suite_name))
             summary = run_hallucination_grounding_suite(
                 run_dir=suite_dir,
                 suite=suite,

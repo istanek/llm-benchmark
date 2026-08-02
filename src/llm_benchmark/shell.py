@@ -63,6 +63,10 @@ SUITE_REGISTRY: dict[str, dict[str, str]] = {
         "label": "OpenClaw-like speed probe (TTFT + decode)",
         "data_path": "data/performance/openclaw_speed_v1.json",
     },
+    "hallucination_grounding_v2": {
+        "label": "Grounding v2 (harder — near-miss contexts, PROVISIONAL)",
+        "data_path": "data/reliability/hallucination_grounding_v2_draft.json",
+    },
     "hallucination_grounding": {
         "label": "Grounding / hallucination reliability",
         "data_path": "data/reliability/hallucination_grounding_v1.json",

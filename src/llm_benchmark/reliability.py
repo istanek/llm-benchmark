@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Callable
 
@@ -42,6 +43,66 @@ ABSTAIN_PHRASES = (
     "not answerable",
     "unable to answer from the context",
     "cannot answer from the context",
+    # Added after five of six abstention references in the v2 draft failed this
+    # list. A near-miss context — one holding the answer to a *neighbouring*
+    # question — invites a refusal phrased as "the context only gives X"
+    # rather than the canonical "does not mention". Every one of those was a
+    # correct refusal being scored as a hallucination.
+    "does not record",
+    "does not list",
+    "does not include",
+    "does not indicate",
+    "not indicated",
+    "does not appear",
+    "no indication",
+    "only mentions",
+    "only gives",
+    "only states",
+    "only says",
+    "only covers",
+    "only provides",
+    "nothing in the context",
+    "is not in the context",
+    "not in the context",
+    # Asserting absence outright is an abstention too: "Larch Industries did
+    # not acquire any company in 2019" is the correct answer to a question
+    # about an acquisition the context never records. Scoring that as a
+    # hallucination is backwards.
+    #
+    # This does loosen the check: a model that fabricates *and* happens to say
+    # "did not" now passes. A fixture can veto that with rejected_values, but
+    # only where the near-miss value cannot legitimately appear — a good
+    # refusal often cites it ("2022 is the *other* probe's year"), so the veto
+    # is wrong for most abstention tasks. The real guard is reading outputs
+    # against verdicts, not a longer list of words.
+    "did not",
+    "no record",
+    "no such",
+    "not present",
+    "is absent",
+    "none of",
+)
+
+# Markers that the model recognised a disagreement rather than picking a side.
+# Used by the ``report_conflict`` behaviour, where the context contradicts
+# itself and the correct answer is to say so and show both values.
+CONFLICT_PHRASES = (
+    "conflict",
+    "conflicting",
+    "contradict",
+    "contradicts",
+    "contradictory",
+    "disagree",
+    "disagrees",
+    "inconsistent",
+    "inconsistency",
+    "discrepancy",
+    "two different",
+    "differs",
+    "differ",
+    "does not match",
+    "do not match",
+    "not consistent",
 )
 
 # Markers of a guess bolted onto an abstention ("the context doesn't say, but it
@@ -84,8 +145,18 @@ REFERENCE_COVERAGE_THRESHOLD = 0.6
 # scored them as hallucinations. Truncated rows are now flagged in the
 # evaluation (``truncated``) so a budget that is still too small is visible in
 # the results instead of silently depressing a model's score.
-GROUNDING_MAX_TOKENS = 256
-STRUCTURED_MAX_TOKENS = 256
+# Raised from 256 after gpt-oss-120b hit the cap on a conflict task: it named
+# the disagreement correctly and was cut off before quoting the second value,
+# which scored as failing to report the conflict. Measured distributions on
+# these suites: nemotron-3 max 84 tokens, gpt-oss-120b median 122 / p90 181.
+# 512 leaves headroom for the most verbose model in the lineup while still
+# bounding a runaway answer, and truncation is flagged per row either way.
+#
+# The cap is deliberately the same for every model. A per-model budget here
+# would make grounding scores incomparable in exactly the way the code suite's
+# shared budget avoids.
+GROUNDING_MAX_TOKENS = 512
+STRUCTURED_MAX_TOKENS = 512
 
 # Tokens too common to carry meaning when checking whether a free-text
 # reference was reproduced.
@@ -101,6 +172,8 @@ _STOPWORDS = frozenset(
 def fixture_path_for_suite_name(repo_root: Path, suite_name: str) -> Path:
     if suite_name in {"hallucination_grounding", "hallucination_grounding_v1"}:
         return repo_root / "data" / "reliability" / "hallucination_grounding_v1.json"
+    if suite_name in {"hallucination_grounding_v2", "grounding_v2"}:
+        return repo_root / "data" / "reliability" / "hallucination_grounding_v2_draft.json"
     if suite_name in {"practical_structured_output", "practical_structured_output_v1"}:
         return repo_root / "data" / "practical" / "practical_structured_output_v1.json"
     if suite_name in {"openclaw_speed", "openclaw_speed_v1"}:
@@ -151,7 +224,25 @@ def build_structured_output_prompt(task: SuiteTask) -> str:
 
 
 def normalize_text(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip().lower())
+    """Fold away the ways a correct answer can be written differently.
+
+    Every transformation here was added because a right answer scored wrong:
+
+    - **Diacritics.** The fixture writes ``Dvorak``; a model that knows the
+      name writes ``Dvořák``. Penalising the better spelling is absurd.
+    - **Thousands separators.** ``2,600`` vs ``2600``.
+    - **Markdown emphasis.** Models bold the value they are asked for, and
+      ``**2600**`` did not contain ``2600`` as a substring.
+
+    None of these change what was said, so none of them should change the
+    verdict. Case and whitespace folding were here already.
+    """
+    folded = unicodedata.normalize("NFKD", value)
+    folded = "".join(char for char in folded if not unicodedata.combining(char))
+    folded = folded.replace("*", "").replace("`", "")
+    # 2,600 -> 2600, but only between digits: "a, b" must keep its comma.
+    folded = re.sub(r"(?<=\d),(?=\d)", "", folded)
+    return re.sub(r"\s+", " ", folded.strip().lower())
 
 
 def reference_tokens(reference: str) -> set[str]:
@@ -251,13 +342,37 @@ def score_hallucination_task(
         else:
             reason = "missing_reference_signal"
     elif behavior == "abstain":
+        # A fixture may name the near-miss value the context dangles — the
+        # decommissioning year of the *other* probe, say. Producing it is
+        # fabrication no matter how the sentence is phrased, so it vetoes the
+        # abstention. This is what lets ABSTAIN_PHRASES stay generous: the
+        # check no longer rests on wording alone.
         if abstention is None:
             reason = "missing_abstention_phrase"
+        elif rejected_present:
+            reason = f"fabricated_value_after_abstention:{','.join(rejected_present)}"
         elif hedged_guess is not None:
             reason = f"hedged_guess_after_abstention:{hedged_guess}"
         else:
             passed = True
             reason = f"abstention_phrase:{abstention}"
+    elif behavior == "report_conflict":
+        # The context disagrees with itself and there is no correct single
+        # answer. Picking a side confidently is the failure this catches, so
+        # both values must appear *and* the disagreement must be named —
+        # quoting two numbers without noticing they clash is not a pass.
+        conflicting = [str(value) for value in (task.metadata.get("conflicting_values") or [])]
+        missing_conflict = [
+            value for value in conflicting if normalize_text(value) not in normalized_output
+        ]
+        marker = first_matching_phrase(CONFLICT_PHRASES, tokens)
+        if missing_conflict:
+            reason = f"missing_conflicting_value:{','.join(missing_conflict)}"
+        elif marker is None:
+            reason = "conflict_not_named"
+        else:
+            passed = True
+            reason = f"conflict_reported:{marker}"
     elif behavior == "correct_user":
         has_negation = first_matching_phrase(NEGATION_PHRASES, tokens) is not None
         if not has_negation:

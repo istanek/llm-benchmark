@@ -1,0 +1,38 @@
+experiment:
+  name: full-sweep-v1
+  description: >-
+    Every axis in one bundle: contamination-probed code, both grounding
+    fixtures, structured output and long-context retrieval, across the full
+    lineup. Exists so a multi-hour run measures everything it can while the
+    GPU is busy, instead of one suite at a time.
+  platforms:
+    - local
+  backend: ollama
+  backend_version: local
+  models:
+    - qwen-3.6
+    - nemotron-3
+    - gpt-oss-120b
+    - gemma-4
+  suites:
+    # The long pole (426 problems x 4 models). The original MBPP is
+    # deliberately absent: its answers are already stored and are re-scored
+    # offline with the same scorer, so re-asking would buy nothing but hours.
+    - code_generation_mbpp_mutated
+    - hallucination_grounding
+    - hallucination_grounding_v2
+    - practical_structured_output
+    - long_context_retrieval
+  sampling:
+    temperature: 0.0
+    top_p: 1.0
+    seed: 42
+    # Same budget as the MBPP run this is compared against. Raising it here
+    # would make the contamination delta partly a budget difference — the one
+    # thing the comparison must not contain.
+    max_tokens: 1536
+  context_lengths:
+    - 512
+    - 4096
+  repetitions: 1
+  warmup_runs: 0

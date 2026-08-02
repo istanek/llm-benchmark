@@ -10,6 +10,7 @@ from llm_benchmark.config import load_backend
 from llm_benchmark.models import GenerationResult, InferenceMetrics, ModelConfig, SamplingConfig
 from llm_benchmark.orchestration import load_openclaw_speed_suite, run_openclaw_speed_suite
 from llm_benchmark.reliability import (
+    GROUNDING_MAX_TOKENS,
     build_summary,
     contains_phrase,
     load_reliability_suite,
@@ -276,9 +277,13 @@ def test_grounding_uses_a_larger_token_budget_than_64(tmp_path: Path) -> None:
         backend=_Recorder(["ok"]),
         backend_config=backend_config,
         model_configs=[_model_config()],
-        sampling=SamplingConfig(max_tokens=512),
+        sampling=SamplingConfig(max_tokens=4096),
     )
-    assert seen and set(seen) == {256}
+    # Asserted against the constant, not a literal: the cap moved from 256 to
+    # 512 when a verbose model was cut off mid-answer, and a test pinning the
+    # old number would have to be edited every time rather than checking the
+    # property that matters — the experiment budget is clamped to the suite's.
+    assert seen and set(seen) == {GROUNDING_MAX_TOKENS}
 
 
 def test_build_summary_reports_consistency_across_repetitions() -> None:
@@ -543,3 +548,175 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(_run_all())
+
+
+# --------------------------------------------------------------------- #
+# report_conflict: the context disagrees with itself                     #
+# --------------------------------------------------------------------- #
+#
+# Added for the v2 grounding fixture. When a source contradicts itself there
+# is no correct single answer, and confidently picking a side is the failure
+# worth catching — the other three behaviours all reward committing to one.
+
+
+def _conflict_task():
+    from llm_benchmark.suites import SuiteTask
+
+    return SuiteTask(
+        task_id="conflict",
+        prompt="How many people does the plant employ?",
+        context="The summary says 420. The appendix table lists 380.",
+        reference="The context gives two conflicting figures, 420 and 380.",
+        metadata={"expected_behavior": "report_conflict", "conflicting_values": ["420", "380"]},
+    )
+
+
+def test_report_conflict_requires_both_values_and_the_disagreement() -> None:
+    from llm_benchmark.reliability import score_hallucination_task
+
+    result = score_hallucination_task(
+        _conflict_task(), "The context is inconsistent: the summary says 420 and the appendix lists 380."
+    )
+    assert result["passed"] is True
+
+
+def test_report_conflict_rejects_picking_a_side() -> None:
+    """The failure this behaviour exists to catch."""
+    from llm_benchmark.reliability import score_hallucination_task
+
+    result = score_hallucination_task(_conflict_task(), "The plant employs 420 people.")
+    assert result["passed"] is False
+    assert "missing_conflicting_value" in result["reason"]
+
+
+def test_report_conflict_rejects_quoting_both_without_noticing() -> None:
+    """Both numbers, no recognition that they clash — a summary, not an answer."""
+    from llm_benchmark.reliability import score_hallucination_task
+
+    result = score_hallucination_task(
+        _conflict_task(), "The summary mentions 420 employees and the appendix mentions 380 employees."
+    )
+    assert result["passed"] is False
+    assert result["reason"] == "conflict_not_named"
+
+
+# --------------------------------------------------------------------- #
+# Abstention phrasings a near-miss context invites                       #
+# --------------------------------------------------------------------- #
+
+
+def test_abstain_accepts_only_gives_phrasings() -> None:
+    """Correct refusals that the original closed list scored as hallucinations."""
+    from llm_benchmark.reliability import score_hallucination_task
+    from llm_benchmark.suites import SuiteTask
+
+    task = SuiteTask(
+        task_id="abstain",
+        prompt="When did the first line open?",
+        context="Announced in 2021; the second line opened in March 2024.",
+        reference="The context does not say.",
+        metadata={"expected_behavior": "abstain"},
+    )
+    for answer in (
+        "The context only gives the announcement year and the second line's opening.",
+        "The context only mentions the second line.",
+        "That date does not appear in the context.",
+        "There is no indication of the first line's opening date.",
+    ):
+        assert score_hallucination_task(task, answer)["passed"] is True, answer
+
+
+def test_reliability_budgets_clear_the_most_verbose_model_measured() -> None:
+    """256 tokens truncated gpt-oss-120b mid-answer on a conflict task, scoring
+    a correct refusal as a failure. Its p90 on these suites is 181 tokens, so
+    the cap must sit well clear of that — a budget that cuts off the longest
+    answers measures the budget."""
+    from llm_benchmark.reliability import GROUNDING_MAX_TOKENS, STRUCTURED_MAX_TOKENS
+
+    assert GROUNDING_MAX_TOKENS >= 384
+    assert STRUCTURED_MAX_TOKENS >= 384
+
+
+# --------------------------------------------------------------------- #
+# Right answers written differently                                      #
+# --------------------------------------------------------------------- #
+#
+# All three shapes below are real gpt-oss-120b answers that the scorer marked
+# wrong. Every one of them is correct. Left unfixed, the sweep would have
+# reported that this model hallucinates more than the others, which is a
+# conclusion about the scorer.
+
+
+def test_diacritics_do_not_break_a_correct_name() -> None:
+    """The fixture writes Dvorak; a model that knows the name writes Dvořák."""
+    from llm_benchmark.reliability import score_hallucination_task
+    from llm_benchmark.suites import SuiteTask
+
+    task = SuiteTask(
+        task_id="name",
+        prompt="Who wrote the report?",
+        context="Reviewed by Nowak, written by Dvorak.",
+        reference="Dvorak",
+        metadata={"expected_behavior": "answer_from_context", "expected_values": ["Dvorak"]},
+    )
+    assert score_hallucination_task(task, "Dvořák wrote the April validation report.")["passed"] is True
+
+
+def test_thousands_separators_and_bold_do_not_break_a_correct_number() -> None:
+    from llm_benchmark.reliability import score_hallucination_task
+    from llm_benchmark.suites import SuiteTask
+
+    task = SuiteTask(
+        task_id="units",
+        prompt="A colleague says line B produces 4200 units per day. Supported?",
+        context="Line A produces 4200 units per day and line B produces 2600 units per day.",
+        reference="No, line B produces 2600.",
+        metadata={"expected_behavior": "correct_user", "expected_values": ["2600"]},
+    )
+    answer = "No. The context says that assembly line B produces **2,600 units per day**, not 4,200."
+    assert score_hallucination_task(task, answer)["passed"] is True
+
+
+def test_a_comma_between_words_is_not_a_thousands_separator() -> None:
+    """The digit-only rule must not eat ordinary punctuation."""
+    from llm_benchmark.reliability import normalize_text
+
+    assert normalize_text("Ostrava, Brno") == "ostrava, brno"
+
+
+def test_asserting_absence_counts_as_abstaining() -> None:
+    """"X did not acquire any company in 2019" is the correct refusal, not a
+    hallucination — the context records no such acquisition."""
+    from llm_benchmark.reliability import score_hallucination_task
+    from llm_benchmark.suites import SuiteTask
+
+    task = SuiteTask(
+        task_id="acquire",
+        prompt="Which company did Larch acquire in 2019?",
+        context="Larch acquired Brandt's logistics division in 2022. Brandt had acquired Consell in 2019.",
+        reference="The context does not mention any 2019 acquisition by Larch.",
+        metadata={"expected_behavior": "abstain"},
+    )
+    answer = (
+        "Based on the provided context, Larch Industries did not acquire any company in 2019. "
+        "The only acquisition mentioned for that year is Brandt Group's purchase of Consell."
+    )
+    assert score_hallucination_task(task, answer)["passed"] is True
+
+
+def test_a_fixture_can_still_veto_a_fabricated_value_after_abstaining() -> None:
+    """Loosening the phrase list needs a way back: a fixture whose near-miss
+    value cannot legitimately be cited can list it as rejected."""
+    from llm_benchmark.reliability import score_hallucination_task
+    from llm_benchmark.suites import SuiteTask
+
+    task = SuiteTask(
+        task_id="veto",
+        prompt="When was Ferrand-2 decommissioned?",
+        context="Ferrand-2 launched in 2021. Ferrand-1 was decommissioned in 2022.",
+        reference="The context does not say.",
+        metadata={"expected_behavior": "abstain", "rejected_values": ["2022"]},
+    )
+    result = score_hallucination_task(task, "The context does not say directly, but it was 2022.")
+    assert result["passed"] is False
+    assert "fabricated_value_after_abstention" in result["reason"]

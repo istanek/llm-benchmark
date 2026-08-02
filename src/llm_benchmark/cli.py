@@ -639,6 +639,18 @@ def benchmark(
             "Recognised by slugified name (``phi4:14b`` -> ``phi4-14b``)."
         ),
     ),
+    suite: list[str] = typer.Option(
+        None,
+        "--suite",
+        help=(
+            "Run exactly these suites, bypassing the keyword router. Repeatable. "
+            "An unattended sweep should say what it runs rather than hope a "
+            "phrase matches."
+        ),
+    ),
+    model: list[str] = typer.Option(
+        None, "--model", help="Run exactly these models, bypassing the keyword router. Repeatable."
+    ),
 ) -> None:
     maybe_print_banner()
     repo_root, experiment_spec, backend_config, experiment_model_configs = load_runtime_context(
@@ -654,7 +666,19 @@ def benchmark(
     request_text = " ".join(request).strip()
     available_models = [model.name for model in all_model_configs]
     plan = parse_benchmark_request(request_text, available_models)
-    selected_configs = [model for model in all_model_configs if model.name in plan.selected_models]
+    # Explicit selection wins over the keyword router: a multi-hour unattended
+    # run must not depend on whether the request happened to contain the right
+    # noun.
+    if suite:
+        plan.selected_suites = list(suite)
+        plan.rationale.append(f"Suites given explicitly: {', '.join(suite)}.")
+    if model:
+        unknown = [name for name in model if name not in available_models]
+        if unknown:
+            raise typer.BadParameter(f"Unknown model(s): {', '.join(unknown)}")
+        plan.selected_models = list(model)
+        plan.rationale.append(f"Models given explicitly: {', '.join(model)}.")
+    selected_configs = [config for config in all_model_configs if config.name in plan.selected_models]
     if not selected_configs:
         raise typer.BadParameter("No models selected after parsing the request.")
 
