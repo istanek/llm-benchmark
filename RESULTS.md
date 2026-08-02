@@ -30,6 +30,35 @@ Grounding, 14 near-miss tasks (`hallucination_grounding_v2`, provisional):
 qwen-3.6 14/14, nemotron-3 13/14, gpt-oss-120b 11/14. The v1 fixture gives
 100 % to everyone and answers nothing.
 
+**Paired comparison (added 2026-08-02).** Every model answered the same 426
+tasks, so the outcomes can be paired per task instead of comparing marginal
+intervals — `scripts/paired_compare.py`, McNemar's exact test on the
+discordant tasks. It changes one conclusion and sharpens another:
+
+| pair | marginal rule | paired | reading |
+|---|---|---|---|
+| gemma-4 vs qwen-3.6 | tie | 26 / 18 flips, p = 0.29 | genuinely tied |
+| gpt-oss-120b vs nemotron-3 | tie | 61 / 36 flips, **p = 0.014** | gpt-oss-120b is better |
+
+The "tie" between gpt-oss-120b and nemotron-3 was a lack of power, not a lack
+of difference. The gemma-4 / qwen-3.6 tie survives the stronger test, which is
+worth more than the original tie: it is now a measured result rather than an
+absence of evidence.
+
+**On tasks nobody was truncated on** (n = 371 after dropping 55), the ranking
+changes shape entirely:
+
+| pair | rates | paired |
+|---|---|---|
+| gpt-oss-120b vs qwen-3.6 | 88.8 % vs 89.3 % | p = 0.87 — tied |
+| gpt-oss-120b vs gemma-4 | 89.0 % vs 91.4 % | p = 0.23 — tied |
+| gpt-oss-120b vs nemotron-3 | 88.7 % vs 78.7 % | p = 0.00004 — better |
+
+So gpt-oss-120b belongs in the top group with gemma-4 and qwen-3.6, and
+nemotron-3 is alone at the bottom. Its "third place, 78.9 %" is a fact about a
+1536-token budget, not about the model — which is what the floor-ceiling
+bracket was saying, now with a test behind it.
+
 **What this does and does not support.** gemma-4 and qwen-3.6 are tied on code
 and cannot be separated by this data. nemotron-3 is clearly behind on both
 axes. gpt-oss-120b's code number is a floor in a way the others' are not —

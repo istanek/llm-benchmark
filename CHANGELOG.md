@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`scripts/paired_compare.py`** — McNemar's exact test on per-task outcomes,
+  plus a paired bootstrap CI and the task-level flip lists. Every model answers
+  the same fixture, and comparing marginal Wilson intervals throws that away:
+  on the four-model MBPP bundle it turns the gpt-oss-120b / nemotron-3 "tie"
+  into a separation (61 vs 36 flips, p = 0.014), while confirming the gemma-4 /
+  qwen-3.6 tie as a measured result rather than an absence of evidence. The
+  flip lists are printed before the p-value on purpose: flips concentrated in
+  one task family, or a re-run of the same model flipping both ways, is news
+  about the scorer rather than the model. Contributed as a review suggestion;
+  its truncation probe only descended into dicts, so `--exclude-truncated`
+  silently dropped zero tasks on the code suite, where truncation decides the
+  ranking — fixed and pinned by tests.
 - **Grounding v2 wired in as a provisional suite** —
   `hallucination_grounding_v2`, 14 near-miss tasks where a plausible wrong
   answer sits inside the context. v1 scores 100 % for every model and cannot
