@@ -270,6 +270,15 @@ def main() -> None:
         "--exclude-truncated", action="store_true",
         help="drop tasks either model truncated — compare ability, not budget",
     )
+    ap.add_argument(
+        "--rewrite-ids", action="append", metavar="OLD=NEW", default=[],
+        help=(
+            "Rewrite task ids before pairing, e.g. 'mbpp-mut/=mbpp/'. Repeatable. "
+            "The contamination probe renames its tasks so both sets can live in "
+            "one results tree; without this they pair to nothing and the script "
+            "reports no common tasks rather than a delta."
+        ),
+    )
     ap.add_argument("--alpha", type=float, default=0.05)
     args = ap.parse_args()
 
@@ -293,8 +302,25 @@ def main() -> None:
     model_a = pick(data_a, args.model_a, None, "A")
     model_b = pick(data_b, args.model_b, model_a if data_b is data_a else None, "B")
 
-    va = collapse(data_a[model_a], args.reps)
-    vb = collapse(data_b[model_b], args.reps)
+    rewrites: list[tuple[str, str]] = []
+    for rule in args.rewrite_ids:
+        if "=" not in rule:
+            sys.exit(f"error: --rewrite-ids expects OLD=NEW, got {rule!r}")
+        old_text, new_text = rule.split("=", 1)
+        rewrites.append((old_text, new_text))
+
+    def rewrite(verdicts: dict[str, bool]) -> dict[str, bool]:
+        if not rewrites:
+            return verdicts
+        out: dict[str, bool] = {}
+        for task, verdict in verdicts.items():
+            for old_text, new_text in rewrites:
+                task = task.replace(old_text, new_text)
+            out[task] = verdict
+        return out
+
+    va = rewrite(collapse(data_a[model_a], args.reps))
+    vb = rewrite(collapse(data_b[model_b], args.reps))
 
     common = sorted(set(va) & set(vb))
     only_a, only_b = set(va) - set(vb), set(vb) - set(va)

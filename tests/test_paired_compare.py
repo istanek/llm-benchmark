@@ -115,3 +115,13 @@ def test_repetitions_collapse_by_majority(paired) -> None:
 def test_pair_mode_keeps_repetitions_apart(paired) -> None:
     per_task = {"t": [(1, True, False), (2, False, False)]}
     assert paired.collapse(per_task, "pair") == {"t@rep1": True, "t@rep2": False}
+
+
+def test_ids_can_be_rewritten_so_the_contamination_probe_pairs(paired) -> None:
+    """The mutated fixture renames its tasks (mbpp-mut/2 for mbpp/2) so both
+    sets can coexist in one results tree. Without a rewrite they pair to
+    nothing, and the script would report "no common tasks" instead of the
+    delta the probe exists to produce."""
+    verdicts = {"mbpp-mut/2": True, "mbpp-mut/3": False}
+    rewritten = {task.replace("mbpp-mut/", "mbpp/"): value for task, value in verdicts.items()}
+    assert set(rewritten) == {"mbpp/2", "mbpp/3"}
