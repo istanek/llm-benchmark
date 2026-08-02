@@ -1464,6 +1464,64 @@ def _overall_rankings_cards_html(ranking: list[dict[str, Any]]) -> str:
 # --------------------------------------------------------------------- #
 
 
+def _render_conditions_section(conditions: dict[str, Any]) -> str:
+    """What each model was asked, and which harness asked it.
+
+    Since reasoning mode and the token budget became per-model, a score is no
+    longer self-describing: a model handed four times the budget of the others
+    just looks better in the table. This card is what stops the page from
+    implying a fair fight that did not happen.
+    """
+    models = conditions.get("models") or {}
+    parts = ['<section class="card">', "<h2>Run conditions</h2>"]
+
+    if not conditions.get("stamped_runs"):
+        parts.append(
+            '<p class="note">No provenance recorded — these runs predate provenance '
+            "stamping, so the harness version and the per-model options behind these "
+            "numbers are unknown. They cannot serve as a comparison baseline without "
+            "<code>--force</code>.</p>"
+        )
+        parts.append("</section>")
+        return "".join(parts)
+
+    if conditions.get("mixed_harness"):
+        parts.append(
+            '<p class="note"><strong>These runs came from different harness commits.</strong> '
+            "A code change can redefine what a suite measures without touching a fixture, "
+            "so the rows above should not be read side by side.</p>"
+        )
+    else:
+        commit = conditions.get("git_commit")
+        if commit:
+            dirty = (
+                " <strong>(dirty working tree — the commit identifies nothing)</strong>"
+                if conditions.get("git_dirty")
+                else ""
+            )
+            parts.append(f'<p class="note">Harness commit <code>{_esc(commit[:12])}</code>{dirty}</p>')
+
+    if models:
+        parts.append(
+            "<table><thead><tr><th>Model</th><th>Reasoning</th>"
+            "<th class='num'>Max tokens</th><th>Quantization</th><th>Tag</th>"
+            "</tr></thead><tbody>"
+        )
+        for name, options in sorted(models.items()):
+            parts.append(
+                "<tr>"
+                f"<td>{_esc(name)}</td>"
+                f"<td>{'on' if options.get('reasoning') else 'off'}</td>"
+                f"<td class='num'>{_esc(options.get('max_tokens') or '—')}</td>"
+                f"<td>{_esc(options.get('quantization') or '—')}</td>"
+                f"<td><code>{_esc(options.get('artifact_path') or '—')}</code></td>"
+                "</tr>"
+            )
+        parts.append("</tbody></table>")
+    parts.append("</section>")
+    return "".join(parts)
+
+
 def render_canonical_report_html(
     aggregate: dict[str, Any],
     *,
@@ -1662,6 +1720,11 @@ def render_canonical_report_html(
     effective_quant_sweep = quant_sweep or aggregate.get("quant_sweep") or {}
     if effective_quant_sweep:
         body.append(_render_quant_sweep_section(effective_quant_sweep))
+
+    # ------------------------------------------------------------- #
+    # Run conditions — what was asked of each model, and by which harness
+    # ------------------------------------------------------------- #
+    body.append(_render_conditions_section(aggregate.get("conditions") or {}))
 
     # ------------------------------------------------------------- #
     # Recent runs tail

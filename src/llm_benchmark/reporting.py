@@ -53,6 +53,12 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
     runs: list[dict[str, Any]] = []
     suite_model_totals: dict[str, dict[str, dict[str, Any]]] = {}
     suite_scoring: dict[str, str] = {}
+    # What each model was actually asked, and which harness asked it. Since
+    # reasoning mode and the token budget became per-model, a pass rate on its
+    # own no longer says what was measured: the same model at 1536 and at 8192
+    # tokens produces two different numbers and one table cell.
+    condition_models: dict[str, dict[str, Any]] = {}
+    harness_stamps: list[tuple[str | None, bool | None]] = []
 
     for run_dir in run_dirs:
         manifest_path = run_dir / "manifest.json"
@@ -60,6 +66,11 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
             continue
 
         manifest = _load_json(manifest_path)
+        provenance = manifest.get("provenance") or {}
+        if provenance:
+            harness_stamps.append((provenance.get("git_commit"), provenance.get("git_dirty")))
+            for model_name, options in (provenance.get("model_options") or {}).items():
+                condition_models.setdefault(model_name, {}).update(options)
         summary_path = run_dir / "summary.json"
         summary = _load_json(summary_path) if summary_path.exists() else None
         rows = _load_jsonl(run_dir / "results.jsonl")
@@ -102,6 +113,13 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
                     metrics_list.append(sample_metrics)
             if not metrics_list:
                 continue
+            # Answers cut off by the budget. They are scored as failures with
+            # a known cause, so a pass rate is only readable next to this count.
+            truncated = sum(
+                1
+                for generation in ([row_generation] + [(s or {}).get("generation") or {} for s in row.get("samples") or []])
+                if isinstance(generation, dict) and generation.get("finish_reason") == "length"
+            )
             metric_bucket = metrics_by_model.setdefault(
                 model_name,
                 {
@@ -109,8 +127,10 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
                     "ttft_ms_sum": 0.0,
                     "decode_time_s_sum": 0.0,
                     "decode_tokens_sum": 0.0,
+                    "truncated": 0.0,
                 },
             )
+            metric_bucket["truncated"] += truncated
             for metrics in metrics_list:
                 metric_bucket["samples"] += 1
                 metric_bucket["ttft_ms_sum"] += float(metrics.get("ttft_ms") or 0.0)
@@ -128,6 +148,7 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
                     "ttft_ms_sum": 0.0,
                     "decode_time_s_sum": 0.0,
                     "decode_tokens_sum": 0.0,
+                    "truncated": 0,
                     "extra": {},
                 },
             )
@@ -199,6 +220,7 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
                 model_bucket["ttft_ms_sum"] += row_metrics["ttft_ms_sum"]
                 model_bucket["decode_time_s_sum"] += row_metrics["decode_time_s_sum"]
                 model_bucket["decode_tokens_sum"] += row_metrics["decode_tokens_sum"]
+                model_bucket["truncated"] += int(row_metrics.get("truncated") or 0)
 
     suites: list[dict[str, Any]] = []
     for suite_name, model_buckets in sorted(suite_model_totals.items()):
@@ -236,12 +258,66 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
             }
         )
 
+    commits = {commit for commit, _ in harness_stamps if commit}
     return {
         "runs_root": str(runs_root),
         "total_runs": len(runs),
         "suites": suites,
         "runs": runs[-10:],
+        "conditions": {
+            # None when every run predates provenance stamping — reported as
+            # unknown rather than assumed identical.
+            "git_commit": next(iter(commits)) if len(commits) == 1 else None,
+            "git_dirty": any(dirty for _, dirty in harness_stamps),
+            "mixed_harness": len(commits) > 1,
+            "stamped_runs": len(harness_stamps),
+            "models": condition_models,
+        },
     }
+
+
+def _conditions_markdown(conditions: dict[str, Any]) -> list[str]:
+    """Render what was asked of each model, and by which harness.
+
+    A pass rate is not self-describing once reasoning mode and the token budget
+    are per-model. Without this block, a model given four times the budget of
+    the others looks like it simply scored higher.
+    """
+    models = conditions.get("models") or {}
+    if not conditions.get("stamped_runs"):
+        return [
+            "## Run conditions",
+            "",
+            "_No provenance recorded — these runs predate provenance stamping, so the "
+            "harness version and the per-model options they used are unknown. They cannot "
+            "serve as a comparison baseline without `--force`._",
+            "",
+        ]
+
+    lines = ["## Run conditions", ""]
+    commit = conditions.get("git_commit")
+    if conditions.get("mixed_harness"):
+        lines.append("**Runs came from different harness commits — do not read these side by side.**")
+        lines.append("")
+    elif commit:
+        dirty = " (dirty working tree — the commit identifies nothing)" if conditions.get("git_dirty") else ""
+        lines.append(f"- harness commit: `{commit[:12]}`{dirty}")
+    if models:
+        lines.extend(
+            [
+                "",
+                "| model | reasoning | max_tokens | quantization | tag |",
+                "| --- | :---: | ---: | --- | --- |",
+            ]
+        )
+        for name, options in sorted(models.items()):
+            lines.append(
+                f"| {name} | {'on' if options.get('reasoning') else 'off'} "
+                f"| {options.get('max_tokens') or '-'} | {options.get('quantization') or '-'} "
+                f"| `{options.get('artifact_path') or '-'}` |"
+            )
+    lines.append("")
+    return lines
 
 
 def render_markdown_report(aggregate: dict[str, Any]) -> str:
@@ -259,8 +335,8 @@ def render_markdown_report(aggregate: dict[str, Any]) -> str:
             [
                 f"## {suite['suite']}",
                 "",
-                "| model | passes | n | pass_rate | 95% CI | consistency | runs | avg_ttft_ms | avg_tok_s |",
-                "| --- | ---: | ---: | ---: | :---: | ---: | ---: | ---: | ---: |",
+                "| model | passes | n | pass_rate | 95% CI | truncated | consistency | runs | avg_ttft_ms | avg_tok_s |",
+                "| --- | ---: | ---: | ---: | :---: | ---: | ---: | ---: | ---: | ---: |",
             ]
         )
         for model in suite["models"]:
@@ -275,14 +351,24 @@ def render_markdown_report(aggregate: dict[str, Any]) -> str:
             else:
                 rate_cell = f"{model['pass_rate']:.2%}"
                 ci_cell = f"{model.get('ci_low', 0.0):.0%}–{model.get('ci_high', 1.0):.0%}"
+            truncated = int(model.get("truncated") or 0)
             lines.append(
                 f"| {model['model']} | {model['passes']} | {model['total']} | {rate_cell} | {ci_cell} "
-                f"| {consistency_cell} | {model['runs']} | {ttft} | {tok_s} |"
+                f"| {truncated or '-'} | {consistency_cell} | {model['runs']} | {ttft} | {tok_s} |"
             )
         if performance_probe:
             lines.append("")
             lines.append("_Timing probe — pass/fail is not scored; read the latency and throughput columns._")
+        truncated_total = sum(int(m.get("truncated") or 0) for m in suite["models"])
+        if truncated_total:
+            lines.append("")
+            lines.append(
+                f"_{truncated_total} answer(s) hit the token budget and were scored as failures. "
+                "Those pass rates are floors._"
+            )
         lines.append("")
+
+    lines.extend(_conditions_markdown(aggregate.get("conditions") or {}))
 
     if aggregate["runs"]:
         lines.extend(

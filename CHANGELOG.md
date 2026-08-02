@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The report says what was asked of each model.** A "Run conditions" block in
+  both the markdown and HTML reports lists per-model `reasoning`, effective
+  `max_tokens`, quantization and tag, plus the harness commit and whether the
+  tree was clean. Once the budget is per-model a pass rate stops being
+  self-describing: a model handed four times the budget just looks better in
+  the table. Runs from different commits are flagged as not readable side by
+  side, and bundles with no provenance say so instead of appearing complete.
+- **Truncated answers are counted in the report.** A `truncated` column per
+  model, and a note that the pass rates are floors when any answer hit the
+  budget. Truncation is a scored failure with a known cause and was previously
+  invisible outside the raw results.
+
+
 ## [0.7.0] - 2026-08-02
 
 ### Added
