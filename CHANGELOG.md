@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **First four-model comparison** (`METHODOLOGY.md`) — gemma-4 87.6 %,
+  qwen-3.6 85.7 %, gpt-oss-120b 78.9 %, nemotron-3 73.0 % on MBPP at a shared
+  1536-token budget with reasoning off. gemma-4 and qwen-3.6 reproduced their
+  earlier run exactly. gpt-oss-120b's number is a floor in a way the others'
+  are not: 48 of its 90 failures are truncation, against 1-4 for the rest.
+- **`scripts/rescore_bundle.py`** — apply the current scorer to a finished
+  bundle's stored answers and write a new bundle, instead of spending hours
+  re-asking the models. Scoring is offline and deterministic; neither the
+  prompt nor the sampling config references the scorer. The original bundle is
+  left intact, and provenance records both halves (`git_commit` = the scorer,
+  `generations_from` = the run that produced the answers) so a re-scored bundle
+  cannot read as a fresh measurement.
 - **The report says what was asked of each model.** A "Run conditions" block in
   both the markdown and HTML reports lists per-model `reasoning`, effective
   `max_tokens`, quantization and tag, plus the harness commit and whether the
@@ -20,6 +32,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   model, and a note that the pass rates are floors when any answer hit the
   budget. Truncation is a scored failure with a known cause and was previously
   invisible outside the raw results.
+
+### Fixed
+
+- **`extract_code` took the first fenced block, not the one with the answer.**
+  A model that explains before it answers — gpt-oss-120b opens with a bare
+  regex or a pseudocode "Algorithm" block — had its explanation compiled and
+  the resulting `SyntaxError` scored as its own failure: 134 of 426 MBPP tasks,
+  putting it at 54.9 % instead of 78.9 %. Blocks are now chosen by content (the
+  one defining the entry point, else the last one defining anything). Re-scoring
+  the stored answers moved gpt-oss-120b +102 tasks and nemotron-3 +1, with zero
+  regressions — the bug was invisible for as long as only single-fence models
+  were measured.
+- **Provenance was stamped on request rather than by default**, and the first
+  run started after it shipped came out unstamped: the standalone
+  code-generation runner builds its own manifest and had not been updated.
+  `build_manifest` now defaults to the checkout it was imported from.
 
 
 ## [0.7.0] - 2026-08-02
