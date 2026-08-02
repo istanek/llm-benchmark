@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Grounding v2 wired in as a provisional suite** —
+  `hallucination_grounding_v2`, 14 near-miss tasks where a plausible wrong
+  answer sits inside the context. v1 scores 100 % for every model and cannot
+  say which one invents less; v2 gives qwen-3.6 14/14, nemotron-3 13/14 and
+  gpt-oss-120b 11/14. Adds a fourth scored behaviour, `report_conflict`: when
+  the context contradicts itself, every conflicting value must appear and the
+  disagreement must be named. Quoting both and picking a side anyway is the
+  failure it exists to catch.
+- **`--suite` and `--model` on `llm-bench benchmark`** — run exactly what is
+  named, bypassing the keyword router. An unattended multi-hour run should not
+  depend on whether the request happened to contain the right noun.
+- **`configs/experiments/full-sweep.yaml`** — every axis in one bundle,
+  ordered cheapest-first so a tail that drags costs only the tail.
 - **Mutated MBPP as a contamination probe** —
   `data/code/code_generation_mbpp_mutated_v1.json`, the same 426 problems with
   renamed entry points, paraphrased prose and recomputed example arguments,
@@ -54,6 +67,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The grounding scorer failed four correct answers.** Found by running the
+  new fixture against real models before the sweep it was built for; each
+  would have reported gpt-oss-120b as hallucinating more than the others.
+  Value matching now folds diacritics (`Dvořák` vs `Dvorak`), thousands
+  separators between digits (`2,600` vs `2600`) and markdown emphasis;
+  `ABSTAIN_PHRASES` accepts assertions of absence ("did not acquire any
+  company in 2019") and the "the context only gives X" family that a near-miss
+  context invites; and a fixture can veto a fabricated value after an
+  abstention with `rejected_values`.
+- **The reliability suites hard-capped answers at 256 tokens.**
+  gpt-oss-120b named a conflict correctly and was cut off before quoting the
+  second value. Cap is now 512 — measured need is a p90 of 181 tokens for the
+  most verbose model in the lineup — and the same for every model, because a
+  per-model budget here would make grounding scores incomparable.
+- **`benchmark` ignored the suites its experiment declared.** The plan came
+  from the request text, so a config listing five suites ran a hardcoded trio
+  when the request matched no keyword; the first launch of the full sweep
+  started `openclaw_speed`. The experiment's own suites are now the fallback,
+  with keyword routing still winning when the request names something.
+- **One v2 fixture context never named the entity its question asked about**,
+  so a model that pointed that out was scored as failing to report a conflict.
 - **`extract_code` took the first fenced block, not the one with the answer.**
   A model that explains before it answers — gpt-oss-120b opens with a bare
   regex or a pseudocode "Algorithm" block — had its explanation compiled and

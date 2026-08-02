@@ -111,10 +111,12 @@ constants:
 
 Two assumptions remain and are known limits rather than fixed problems:
 
-- **The grounding scorer is a list of English phrases.** A refusal worded
-  outside `ABSTAIN_PHRASES`, or written in another language, scores as a
-  hallucination. This is a false-negative machine for any model whose register
-  differs from the v1 three.
+- **The grounding scorer is still a list of English phrases**, though a longer
+  and better-behaved one since 2026-08-02 (see below). A refusal worded outside
+  `ABSTAIN_PHRASES`, or written in another language, still scores as a
+  hallucination. Every model measured so far answers in English, so this is a
+  latent problem rather than an observed one — which is exactly how the
+  previous version of it stayed hidden.
 - **Prompts go to Ollama's `/api/generate` raw**, so the chat template comes
   from the model's Modelfile. The same model served through the
   openai-compatible backend is not template-identical, and cross-backend
@@ -162,6 +164,52 @@ one-sided correction — tasks that passed get no chance to regress — and the
 project has already published one such estimate as though it settled a
 question. The width stays on the page until a run at an adequate budget
 replaces it.
+
+### What the grounding scorer was getting wrong (2026-08-02)
+
+The v2 fixture was run against real models before the sweep it was built for,
+and four defects turned up. **None of them were in the models.** Every one
+would have made the run report that gpt-oss-120b hallucinates more than the
+others, which is a statement about the scorer.
+
+| what the model wrote | why it failed | verdict |
+|---|---|---|
+| "**Dvořák** wrote the report" | fixture expects `Dvorak` | correct |
+| "line B produces **2,600 units**" | fixture expects `2600` | correct |
+| "Larch **did not acquire** any company in 2019" | phrasing outside `ABSTAIN_PHRASES` | correct |
+| "The sources disagree… the fix was introduced in" | cut off at the 256-token cap | correct, truncated |
+
+Fixes, and why each is the shape it is:
+
+- **Value matching folds diacritics, thousands separators between digits, and
+  markdown emphasis.** None of these change what was said, so none of them
+  should change the verdict. The separator rule is digit-bounded, so "Ostrava,
+  Brno" keeps its comma.
+- **`ABSTAIN_PHRASES` accepts assertions of absence** ("did not", "no record",
+  "not present"), plus the "the context only gives X" family that a near-miss
+  context invites. This does loosen the check — a model that fabricates *and*
+  says "did not" now passes — and a fixture can veto that with
+  `rejected_values`. That veto is deliberately not applied to most abstention
+  tasks, because a good refusal often cites the near-miss value to explain
+  itself ("2022 is the *other* probe's year"). The real guard is reading
+  outputs against verdicts, not a longer word list.
+- **The reliability budget is 512 tokens, up from 256**, the same for every
+  model. Measured need: nemotron-3 tops out at 84 tokens, gpt-oss-120b sits at
+  a median of 122 and a p90 of 181. A per-model budget here would make
+  grounding scores incomparable exactly as it would in the code suite.
+- **One fixture context never named the entity its own question asked about**,
+  so a model that pointed that out was marked wrong.
+
+`report_conflict` was added as a fourth scored behaviour for the two
+contradictory-source tasks: every value in `conflicting_values` must appear
+**and** the disagreement must be named. Quoting both numbers without noticing
+they clash is not a pass — which is precisely what nemotron-3 does, presenting
+one version as the answer and the other in parentheses.
+
+Preliminary v2 results (14 tasks, so intervals are wide): qwen-3.6 14/14,
+nemotron-3 13/14, gpt-oss-120b 11/14 — against 100 % for all three on v1. The
+fixture discriminates; v1 does not. It is still marked provisional, and its
+numbers are data rather than a published claim about any model.
 
 ### Contamination: telling recall apart from ability
 
