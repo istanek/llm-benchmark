@@ -665,7 +665,9 @@ def benchmark(
     all_model_configs = resolved.configs
     request_text = " ".join(request).strip()
     available_models = [model.name for model in all_model_configs]
-    plan = parse_benchmark_request(request_text, available_models)
+    plan = parse_benchmark_request(
+        request_text, available_models, default_suites=list(experiment_spec.suites)
+    )
     # Explicit selection wins over the keyword router: a multi-hour unattended
     # run must not depend on whether the request happened to contain the right
     # noun.

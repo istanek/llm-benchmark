@@ -49,7 +49,11 @@ def normalize_request(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip().lower())
 
 
-def parse_benchmark_request(request: str, available_models: list[str]) -> BenchmarkPlan:
+def parse_benchmark_request(
+    request: str,
+    available_models: list[str],
+    default_suites: list[str] | None = None,
+) -> BenchmarkPlan:
     normalized = normalize_request(request)
     selected_models = [model for model in available_models if model.lower() in normalized]
     rationale: list[str] = []
@@ -90,8 +94,20 @@ def parse_benchmark_request(request: str, available_models: list[str]) -> Benchm
         selected_suites.append("long_context_retrieval")
 
     if not selected_suites:
-        selected_suites = ["openclaw_speed", "hallucination_grounding", "practical_structured_output"]
-        rationale.append("No explicit suite keywords found, so speed plus both reliability slices were selected.")
+        # Fall back to what the experiment declares, not to a hardcoded trio.
+        # A config listing five suites silently running three others is the
+        # kind of surprise that costs a whole run: the first launch of the
+        # full sweep started openclaw_speed because the request text happened
+        # to contain no routing keyword.
+        selected_suites = list(default_suites or [])
+        if selected_suites:
+            rationale.append("No suite keywords in the request, so the experiment's own suites were used.")
+        else:
+            selected_suites = ["openclaw_speed", "hallucination_grounding", "practical_structured_output"]
+            rationale.append(
+                "No suite keywords and no suites declared by the experiment, so speed plus both "
+                "reliability slices were selected."
+            )
     else:
         rationale.append("Selected suites from request keywords.")
 

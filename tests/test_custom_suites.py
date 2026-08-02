@@ -817,3 +817,27 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(_run_all())
+
+
+def test_benchmark_request_falls_back_to_the_experiment_suites() -> None:
+    """A request with no routing keyword must run what the config declares.
+
+    The first launch of the full sweep ran openclaw_speed instead of the five
+    suites its YAML listed, because "full sweep" matches no keyword and the
+    fallback was a hardcoded trio. An eight-hour run should not depend on the
+    request text containing the right noun.
+    """
+    from llm_benchmark.orchestration import parse_benchmark_request
+
+    plan = parse_benchmark_request(
+        "full sweep", ["qwen-3.6"], default_suites=["hallucination_grounding", "code_generation_mbpp_mutated"]
+    )
+    assert plan.selected_suites == ["hallucination_grounding", "code_generation_mbpp_mutated"]
+
+
+def test_keywords_still_win_over_the_experiment_suites() -> None:
+    """Routing is still a feature: asking for speed gets speed."""
+    from llm_benchmark.orchestration import parse_benchmark_request
+
+    plan = parse_benchmark_request("measure latency", ["qwen-3.6"], default_suites=["code_generation"])
+    assert plan.selected_suites == ["openclaw_speed"]
