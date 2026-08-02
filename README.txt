@@ -539,7 +539,11 @@ the HTML report.
 
   METHODOLOGY.md        Why we measure what we measure. The principles
                         we hold ourselves to (publish failures, not
-                        just wins).
+                        just wins), and the rules for reading a number.
+
+  RESULTS.md            What came out. Current standings at the top,
+                        then the run log in the order it happened,
+                        including the runs later found to be wrong.
 
   docs/architecture.md  How the code is laid out. Module map, data
                         flow, extension recipes for adding your own
