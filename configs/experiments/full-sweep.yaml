@@ -14,15 +14,22 @@ experiment:
     - nemotron-3
     - gpt-oss-120b
     - gemma-4
+  # Ordered cheapest-first on purpose. Each suite writes its summary as it
+  # finishes, so if the tail drags or dies, everything ahead of it is already
+  # on disk. The reliability suites cost minutes; the code suite costs hours.
   suites:
-    # The long pole (426 problems x 4 models). The original MBPP is
-    # deliberately absent: its answers are already stored and are re-scored
-    # offline with the same scorer, so re-asking would buy nothing but hours.
-    - code_generation_mbpp_mutated
     - hallucination_grounding
     - hallucination_grounding_v2
     - practical_structured_output
-    - long_context_retrieval
+    # The long pole (426 problems x 4 models, ~8 h). The original MBPP is
+    # deliberately absent: its answers are already stored and are re-scored
+    # offline with the same scorer, so re-asking would buy nothing but hours.
+    - code_generation_mbpp_mutated
+    # Fast profile: 18 cells per model rather than the full grid's 128. The
+    # full grid runs 131k-token prefills over four lengths and four depths,
+    # which is an open-ended tail on an already long run. Last in the order so
+    # it cannot delay anything that matters more.
+    - long_context_retrieval_fast
   sampling:
     temperature: 0.0
     top_p: 1.0
