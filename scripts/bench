@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Short launcher for the llm-benchmark HumanEval run.
+#
+# Exists because long pasted command lines get mangled in this terminal, so
+# every action here is a few characters:
+#
+#   ./bench            start the full 164-problem run on all three models
+#   ./bench status     is it running, and how far along
+#   ./bench log        follow the live log (Ctrl+C just stops following)
+#   ./bench stop       kill the run
+#   ./bench report     show the report of the newest finished bundle
+#
+# Anything after a subcommand is passed to the runner, e.g.
+#   ./bench start --models qwen-3.6 --task-limit 20
+
+set -u
+
+REPO="${LLM_BENCH_REPO:-$HOME/llm-benchmark}"
+SCRIPT="$REPO/scripts/run_full_code_generation.py"
+LOG=/tmp/humaneval.log
+# The run's pid, recorded at launch. Pattern matching was the old approach and
+# it lied: `pgrep -f run_full_code_generation` matches any process whose own
+# command line merely mentions that string — a shell waiting for the run to
+# finish matched itself, waited forever, and `status` kept reporting a run that
+# had ended hours earlier as still going. A pid cannot be ambiguous.
+PIDFILE="${LLM_BENCH_PIDFILE:-/tmp/llm-bench-run.pid}"
+
+# True when the pidfile names a live process that is actually our runner, so a
+# stale pidfile whose number has been recycled by some unrelated process does
+# not read as a running benchmark.
+run_pid() {
+    [ -f "$PIDFILE" ] || return 1
+    local pid
+    pid=$(cat "$PIDFILE" 2>/dev/null) || return 1
+    [ -n "$pid" ] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    tr '\\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "run_full_code_generation" || return 1
+    echo "$pid"
+}
+
+die() { echo "$*" >&2; exit 1; }
+
+check_repo() {
+    [ -f "$SCRIPT" ] || die "Runner not found at $SCRIPT
+Point this script at the checkout, or re-clone it:
+    git clone https://github.com/istanek/llm-benchmark.git ~/llm-benchmark
+    LLM_BENCH_REPO=~/llm-benchmark ./bench"
+}
+
+case "${1:-start}" in
+    start)
+        shift 2>/dev/null || true
+        check_repo
+        if pid=$(run_pid); then
+            die "Already running (pid $pid). ./bench status"
+        fi
+        if ! curl -sf -m 5 http://localhost:11434/api/tags >/dev/null; then
+            die "Ollama is not answering on localhost:11434 — start it first."
+        fi
+        args=("$@")
+        [ ${#args[@]} -eq 0 ] && args=(--models qwen-3.6 gemma-4 nemotron-3)
+        setsid nohup python3 "$SCRIPT" "${args[@]}" >"$LOG" 2>&1 </dev/null &
+        echo $! > "$PIDFILE"
+        sleep 3
+        pid=$(run_pid) || die "Failed to start — see $LOG"
+        echo "started (pid $pid), logging to $LOG"
+        echo "follow it with: ./bench log"
+        ;;
+    status)
+        if pid=$(run_pid); then
+            echo "running (pid $pid)"
+        else
+            echo "not running"
+        fi
+        [ -f "$LOG" ] && grep -E "coding task|: done in|: starting|FAILED|finished in" "$LOG" | tail -5
+        ;;
+    log)
+        [ -f "$LOG" ] || die "No log at $LOG yet."
+        tail -f "$LOG"
+        ;;
+    stop)
+        if pid=$(run_pid); then
+            kill "$pid" && echo "stopped (pid $pid)"
+        else
+            echo "was not running"
+        fi
+        ;;
+    report)
+        check_repo
+        newest=$(ls -1dt "$REPO"/results/benchmarks/*/report.md 2>/dev/null | head -1)
+        [ -n "$newest" ] || die "No report yet — the run writes one when it finishes."
+        echo "== $newest"
+        cat "$newest"
+        ;;
+    *)
+        sed -n '3,20p' "$0"
+        ;;
+esac

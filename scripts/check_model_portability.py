@@ -199,10 +199,26 @@ def report(model: ModelConfig, probes: list[SuiteProbe], sampling: SamplingConfi
             )
         problems.extend(f"{probe.suite}: {note}" for note in probe.notes)
 
+    # Truncation below the threshold is still worth saying out loud. It is not
+    # a symptom that something might be wrong — it is a scored failure with a
+    # known cause, and one in five on a five-task sample is the difference
+    # between 100 % and 80 %. Reported as a caveat rather than a verdict,
+    # because a handful of tasks cannot tell a tight budget from a verbose model.
+    caveats: list[str] = []
+    for probe in probes:
+        if 0 < probe.rate(probe.truncated) < BROKEN_RATE:
+            caveats.append(
+                f"{probe.suite}: {probe.truncated}/{probe.total} answers hit the {sampling.max_tokens}-token "
+                "budget and were scored as failures. Not enough to call the suite broken, enough to "
+                "make its pass rate a floor. Raise max_output_tokens before reporting a number."
+            )
+
     print()
     if not problems:
         print("VERDICT  measurable — no harness-side failure mode above threshold.")
         print("         Pass rates above are a real (if tiny) sample of this model's ability.")
+        for caveat in caveats:
+            print(f"  caveat: {caveat}")
         return True
     print("VERDICT  not measurable as configured:")
     for problem in problems:

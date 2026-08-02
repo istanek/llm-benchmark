@@ -324,6 +324,64 @@ only previously failing tasks were re-generated, so tasks that passed at 512
 had no chance to regress under a different sample. The clean full run at 1536
 supersedes it.
 
+### Clean MBPP run at the intended budget (2026-08-01)
+
+Bundle `20260801T135412Z-54cefdaa`, 426 problems, `max_tokens = 1536`, 4 h
+57 min:
+
+| Model | pass@1 | 95 % CI | truncated | assertion | runtime | compile |
+|---|---|---|---|---|---|---|
+| gemma-4 | **87.6 %** | 84-90 % | 1 | 48 | 4 | 1 |
+| qwen-3.6 | **85.7 %** | 82-89 % | 3 | 53 | 6 | 2 |
+| nemotron-3 | **72.8 %** | 68-77 % | 4 | 90 | 21 | 5 |
+
+Truncation is effectively gone (1 / 3 / 4, against 32 / 20 / 57 at 512), so
+these numbers describe the models rather than the budget. nemotron-3 stays
+clearly separated; gemma-4 and qwen-3.6 overlap and remain a tie, as they do
+on HumanEval.
+
+**The clean run reproduced the targeted re-check exactly** — 373 / 365 / 310
+problems passed, the same counts the partial re-generation predicted. At
+temperature 0 with a fixed seed that is the expected outcome, but it is worth
+recording that the cheap method did not mislead here.
+
+nemotron-3's failures differ in kind, not only in count: 90 assertion failures
+against gemma-4's 48, i.e. code that runs and returns the wrong answer. Its
+gap is not an output-format artefact.
+
+### Portability check on an unseen model (2026-08-02)
+
+`gpt-oss:120b` — a family, quantization (MXFP4) and size the harness had never
+run, with no curated config — probed with
+`scripts/check_model_portability.py`, five tasks per suite:
+
+| | pass | empty | truncated | median tokens |
+|---|---|---|---|---|
+| code, reasoning off | 5/5 | 0 | 0 | 896 |
+| code, reasoning on | 4/5 | 0 | **1** | 970 |
+| grounding, off / on | 5/5 | 0 | 0 | 84 / 105 |
+| structured, off / on | 5/5 | 0 | 0 | 164 / 164 |
+
+**A model config and nothing else was enough.** No prompt, scorer or fixture
+change; the config auto-detected from `/api/tags` ran all three suites clean.
+
+Two things worth carrying forward:
+
+- **The old 512-token budget would have scored this model as unable to code.**
+  Its median code answer is 896 tokens with reasoning off. Nothing about that
+  failure would have looked like a budget problem in the summary — it would
+  have read as `compile_error`, exactly as it did for the v1 lineup before the
+  truncation flag existed.
+- **Reasoning mode costs budget, and 1536 is not much headroom.** One code
+  answer in five hit the ceiling with reasoning on. That is below the
+  threshold that flags a suite as unmeasurable, which is why the probe now
+  reports any truncation at all as a caveat: it is not a hint that something
+  may be wrong, it is a scored failure with a known cause, and one in five is
+  the difference between 100 % and 80 %.
+
+Five tasks per suite cannot rank a model, and this run does not try to. It
+answers the prior question — whether the harness can measure it at all.
+
 ### Long-context retrieval (v0.4.0 – v0.4.3, fast profile)
 
 Fast profile grid: lengths = 4 096 / 32 768 / 131 072 tokens,

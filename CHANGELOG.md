@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     conversion check. `mbpp/56` is excluded — its canonical solution recurses
     past Python's limit — and the exclusion is stated in the fixture notes.
 
+- **`scripts/bench`** — the unattended-run launcher, previously an untracked
+  file in `~`. Rewritten to track the run by pid: `pgrep -f
+  run_full_code_generation` matched any process whose command line merely
+  mentioned that string, so a shell waiting for the run to end matched itself,
+  waited forever, and `./bench status` reported a run that had finished hours
+  earlier as still going.
 - **Launchers so the CLI runs from anywhere** — `scripts/llm-bench-launcher`
   plus `scripts/install-launchers.sh`, which put `llm-bench`, `llm_benchmark`,
   `spark_benchmark` and the other declared names on `$PATH`. No install step:
