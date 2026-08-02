@@ -382,6 +382,58 @@ Two things worth carrying forward:
 Five tasks per suite cannot rank a model, and this run does not try to. It
 answers the prior question — whether the harness can measure it at all.
 
+### Four models, and the bug the fourth one found (2026-08-02)
+
+First run with a model outside the v1 lineup. Bundle
+`20260802T051407Z-51ad314a`, MBPP, 426 problems, `max_tokens = 1536`,
+reasoning off for every model, 7 h 53 min. Scores below are from the re-scored
+bundle (`-rescored`); see the extraction bug beneath the table.
+
+| Model | pass@1 | 95 % CI | truncated | assertion | runtime | compile |
+|---|---|---|---|---|---|---|
+| gemma-4 | **87.6 %** | 84-90 % | 1 | 48 | 4 | 1 |
+| qwen-3.6 | **85.7 %** | 82-89 % | 3 | 53 | 6 | 2 |
+| gpt-oss-120b | **78.9 %** | 75-82 % | **48** | 27 | 18 | 45 |
+| nemotron-3 | **73.0 %** | 69-77 % | 4 | 91 | 19 | 5 |
+
+gemma-4 and qwen-3.6 reproduced their previous run exactly (373 and 365
+problems), which is the expected outcome at temperature 0 and a useful check
+that nothing else moved.
+
+**The new model found a scoring bug on its first run.** `extract_code` took
+the first fenced block in the output. gpt-oss-120b explains before it answers
+and its explanations contain fences — a bare regex on `mbpp/7`, a pseudocode
+"Algorithm" block on `mbpp/14` — so the harness compiled those and recorded
+the `SyntaxError` as the model's failure. It scored 54.9 % with 134 of 426
+tasks as `compile_error`, a failure profile no competent model produces:
+weak code *runs* and returns wrong answers, it does not fail to parse.
+
+Blocks are now chosen by content (the one defining the entry point, else the
+last one defining anything). Re-scoring the stored answers:
+
+| Model | before | after | changed |
+|---|---|---|---|
+| gpt-oss-120b | 234 | **336** | +102, −0 |
+| nemotron-3 | 310 | 311 | +1, −0 |
+| qwen-3.6 | 365 | 365 | 0 |
+| gemma-4 | 373 | 373 | 0 |
+
+Zero regressions, and the asymmetry is the finding: the bug was invisible for
+as long as only the v1 three were measured, because all three answer with a
+single fence. **Three models cannot validate a harness that claims to measure
+any model.** This is the fifth scoring bug in this suite, and the first found
+by widening the lineup rather than by reading the code.
+
+**gpt-oss-120b's 78.9 % is a floor, and more so than the others.** 48 of its
+90 remaining failures are answers cut off at 1536 tokens; the corresponding
+counts are 1, 3 and 4 for the other three. Its median code answer is 775
+tokens against gemma-4's 318 and qwen-3.6's 114. Every model was given the same
+budget, which is the only way the comparison is readable — but a budget that
+suits three models is itself a measurement choice, and it is not neutral
+between them. What this table supports is "at 1536 tokens, on MBPP,
+gpt-oss-120b places third". What it does not support is a claim about its
+coding ability in general.
+
 ### Long-context retrieval (v0.4.0 – v0.4.3, fast profile)
 
 Fast profile grid: lengths = 4 096 / 32 768 / 131 072 tokens,
