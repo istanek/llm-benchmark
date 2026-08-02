@@ -229,3 +229,71 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(_run_all())
+
+
+# --------------------------------------------------------------------- #
+# Picking the answer out of an explanation                               #
+# --------------------------------------------------------------------- #
+#
+# Shapes taken from gpt-oss-120b's real MBPP output. Taking the first fenced
+# block cost it 134 of 426 tasks, every one scored as compile_error — i.e. as
+# if the model could not write Python, when it had written the answer one
+# block further down.
+
+
+def test_prefers_the_block_defining_the_entry_point() -> None:
+    from llm_benchmark.code_generation import extract_code
+
+    output = (
+        "**Solution Explanation**\n\n"
+        "The easiest way to locate such sequences is a regular expression:\n\n"
+        "```\n\\b\\w{4,}\\b\n```\n\n"
+        "* `\\b` - word boundary\n\n"
+        "```python\n"
+        "import re\n\n"
+        "def find_char_long(s):\n"
+        "    return re.findall(r'\\b\\w{4,}\\b', s)\n"
+        "```\n"
+    )
+    code = extract_code(output, prompt="", entry_point="find_char_long")
+    assert "def find_char_long" in code
+    assert "import re" in code, "the whole block is kept, imports included"
+    assert "word boundary" not in code
+
+
+def test_skips_a_pseudocode_block_that_precedes_the_answer() -> None:
+    """The 'Algorithm' block has no `def`, so it is not the answer."""
+    from llm_benchmark.code_generation import extract_code
+
+    output = (
+        "**Algorithm**\n```\n"
+        "find_Volume(b, h, L):\n    return (b * h * L) // 2\n"
+        "```\n\nWe use integer division.\n\n"
+        "```python\ndef find_Volume(b, h, L):\n    return (b * h * L) // 2\n```\n"
+    )
+    code = extract_code(output, prompt="", entry_point="find_Volume")
+    assert code.startswith("def find_Volume")
+
+
+def test_falls_back_to_the_last_block_that_defines_something() -> None:
+    """Entry point renamed: still a failure, but score the attempt, not a sample."""
+    from llm_benchmark.code_generation import extract_code
+
+    output = "```\nx = 1\n```\n\n```python\ndef renamed(a):\n    return a\n```\n"
+    code = extract_code(output, prompt="", entry_point="expected_name")
+    assert code.startswith("def renamed")
+
+
+def test_a_single_block_is_unaffected() -> None:
+    """The v1 lineup answers with one fence; their scores must not move."""
+    from llm_benchmark.code_generation import extract_code
+
+    output = "```python\ndef solve(n):\n    return n * 2\n```\n"
+    assert extract_code(output, prompt="", entry_point="solve").strip() == "def solve(n):\n    return n * 2"
+
+
+def test_blocks_without_any_definition_keep_the_first() -> None:
+    from llm_benchmark.code_generation import extract_code
+
+    output = "```\nresult = 42\n```\n\n```\nprint(result)\n```\n"
+    assert extract_code(output, prompt="", entry_point="whatever").strip() == "result = 42"

@@ -116,13 +116,45 @@ _CODE_FENCE_RE = re.compile(r"```(?:python|py)?\s*\n(.*?)\n```", re.DOTALL | re.
 _TOP_LEVEL_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_]\w*\s*(?::[^=]+)?=\s*\S")
 
 
+def _pick_answer_block(blocks: list[str], entry_point: str) -> str:
+    """Choose the fenced block that holds the answer.
+
+    Preference order, and the reason for each step:
+
+    1. A block defining ``entry_point`` — unambiguous, and the common case.
+    2. Otherwise the *last* block defining any function or class. Explanations
+       run before the answer, so later is more likely to be the solution;
+       earlier blocks tend to be worked examples.
+    3. Otherwise the first block, preserving the previous behaviour for output
+       that has no definition anywhere (a bare expression, a continuation).
+
+    A model that renames the required function is still scored as failing —
+    that is the model's error, and step 2 does not rescue it, it just picks the
+    block most likely to be the attempt.
+    """
+    marker = f"def {entry_point}"
+    for block in blocks:
+        if marker in block:
+            return block
+    for block in reversed(blocks):
+        if "def " in block or "class " in block:
+            return block
+    return blocks[0]
+
+
 def extract_code(output: str, prompt: str, entry_point: str) -> str:
     """Best-effort extraction of executable code from a model output.
 
     Strategy:
-      1. If the output contains a fenced python block, return its full
-         contents — imports and decorators that precede ``def`` must be
-         preserved or the sandbox blows up on ``NameError``.
+      1. If the output contains fenced blocks, return the one that holds the
+         answer — the block defining ``entry_point``, else the last block that
+         defines anything, else the first. Taking the first block outright
+         broke on models that explain before they answer: gpt-oss-120b opens
+         with an illustrative fence (a bare regex, a pseudocode "Algorithm"
+         block) and puts the real function in a later one, which cost it 134
+         of 426 MBPP tasks as ``compile_error``. Whole blocks are returned,
+         since imports and decorators before ``def`` must be preserved or the
+         sandbox blows up on ``NameError``.
       2. If there is no fence but ``def <entry_point>`` is present, slice
          from the first top-level code construct — not from the entry point
          itself. Answers routinely define a helper *above* the target
@@ -133,9 +165,9 @@ def extract_code(output: str, prompt: str, entry_point: str) -> str:
     """
     candidate = output
 
-    fence_match = _CODE_FENCE_RE.search(candidate)
-    if fence_match:
-        return fence_match.group(1)
+    blocks = _CODE_FENCE_RE.findall(candidate)
+    if blocks:
+        return _pick_answer_block(blocks, entry_point)
 
     def_marker = f"def {entry_point}"
     if def_marker in candidate:
