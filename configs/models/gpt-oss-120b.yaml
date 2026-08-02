@@ -1,0 +1,20 @@
+name: gpt-oss-120b
+family: gptoss
+base_model: gpt-oss-120b
+revision: gpt-oss:120b
+quantization: MXFP4
+source: ollama-local
+context_length: 131072
+artifact_path: gpt-oss:120b
+# Off deliberately, so this model answers under the same conditions as the v1
+# lineup and the scores are directly comparable. Reasoning on is a separate
+# measurement, not a better version of this one: the portability probe put its
+# median code answer at 970 tokens with reasoning enabled and truncated one
+# answer in five at the suite's 1536-token budget, so a reasoning run needs
+# max_output_tokens raised — which by itself makes the comparison unequal.
+reasoning: false
+notes:
+  - Added 2026-08-02 as the first model outside the v1 lineup
+  - Portability probe passed 15/15 with reasoning off (median 896 decode tokens
+    on code tasks) — see METHODOLOGY.md
+  - MXFP4 weights; 120B total parameters, mixture-of-experts
