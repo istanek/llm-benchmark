@@ -40,21 +40,28 @@ def build_manifest(
     repo_root: Path | None = None,
     model_configs: list[ModelConfig] | None = None,
 ) -> RunManifest:
-    """Build the manifest, stamping provenance when the repo root is known.
+    """Build the manifest, always stamping provenance.
 
-    ``repo_root`` is optional so existing callers keep working, but a manifest
-    without provenance cannot be compared against another run — see
-    ``llm_benchmark.provenance``.
+    ``repo_root`` defaults to the checkout this package was imported from, so a
+    caller cannot forget to stamp. It was optional at first, and the very first
+    run afterwards produced an unstamped bundle: ``run_full_code_generation.py``
+    builds its own manifest and had not been updated, so the field quietly did
+    nothing in the one place a baseline actually gets measured. Outside a
+    checkout the git lookups return None, which reads as "unknown" and blocks
+    comparison — the honest outcome, not a silent pass.
+
+    ``model_configs`` is still optional: without it the stamp records the code
+    but not the per-model options, which is worth having on its own.
     """
-    provenance = None
-    if repo_root is not None:
-        # Imported here: provenance imports models, which imports nothing from
-        # runtime, and a module-level import would close the loop.
-        from llm_benchmark.provenance import collect_provenance
+    # Imported here: provenance imports models, which imports nothing from
+    # runtime, and a module-level import would close the loop.
+    from llm_benchmark.provenance import collect_provenance
 
-        provenance = collect_provenance(
-            repo_root, model_configs=model_configs, sampling=experiment.sampling
-        )
+    provenance = collect_provenance(
+        repo_root if repo_root is not None else Path(__file__).resolve().parents[2],
+        model_configs=model_configs,
+        sampling=experiment.sampling,
+    )
     return RunManifest(
         experiment=experiment,
         platform=platform_config,

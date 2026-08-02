@@ -113,6 +113,8 @@ def main() -> int:
                 backend_config=backend_config,
                 model_names=[model_name],
                 results_dir=run_dir,
+                repo_root=REPO_ROOT,
+                model_configs=[model_config],
             ),
         )
         log(f"[{index}/{len(args.models)}] {model_name}: starting")

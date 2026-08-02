@@ -152,3 +152,50 @@ def test_load_bundle_reads_the_nested_code_suite_shape(tmp_path: Path) -> None:
     bundle = load_bundle(tmp_path)
     score = bundle.score_for("code_generation_mbpp_v1", "new-model")
     assert score is not None and score.total == 426 and score.passes == 362
+
+
+# --------------------------------------------------------------------- #
+# Every manifest gets stamped                                            #
+# --------------------------------------------------------------------- #
+
+
+def test_build_manifest_stamps_provenance_without_being_asked(tmp_path: Path) -> None:
+    """The stamp was opt-in once, and the first real run after it shipped came
+    out unstamped: the standalone code-generation runner builds its own
+    manifest and nobody had updated the call. Defaulting it is the fix; this
+    test is what keeps it defaulted."""
+    from llm_benchmark.config import load_backend, load_experiment, load_model_config, load_platform
+    from llm_benchmark.runtime import build_manifest
+
+    repo_root = Path(__file__).resolve().parents[1]
+    experiment = load_experiment(repo_root / "configs/experiments/code-generation.yaml").experiment
+    manifest = build_manifest(
+        experiment=experiment,
+        platform_config=load_platform(repo_root / "configs/platforms/local.yaml"),
+        backend_config=load_backend(repo_root / "configs/backends/ollama.yaml"),
+        model_names=["qwen-3.6"],
+        results_dir=tmp_path,
+    )
+    assert manifest.provenance is not None
+    assert manifest.provenance.schema_version == "harness-provenance/v1"
+
+
+def test_build_manifest_records_the_options_each_model_ran_with(tmp_path: Path) -> None:
+    from llm_benchmark.config import load_backend, load_experiment, load_model_config, load_platform
+    from llm_benchmark.runtime import build_manifest
+
+    repo_root = Path(__file__).resolve().parents[1]
+    experiment = load_experiment(repo_root / "configs/experiments/code-generation.yaml").experiment
+    model = load_model_config(repo_root / "configs/models/gpt-oss-120b.yaml")
+    manifest = build_manifest(
+        experiment=experiment,
+        platform_config=load_platform(repo_root / "configs/platforms/local.yaml"),
+        backend_config=load_backend(repo_root / "configs/backends/ollama.yaml"),
+        model_names=[model.name],
+        results_dir=tmp_path,
+        model_configs=[model],
+    )
+    options = manifest.provenance.model_options[model.name]
+    assert options["reasoning"] is False
+    assert options["max_tokens"] == experiment.sampling.max_tokens
+    assert options["artifact_path"] == "gpt-oss:120b"
