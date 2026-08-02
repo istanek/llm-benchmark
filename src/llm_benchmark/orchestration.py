@@ -9,6 +9,7 @@ from typing import Any, Callable
 from llm_benchmark.code_generation import (
     default_reference_scores_path,
     load_code_generation_suite,
+    load_mbpp_mutated_suite,
     load_mbpp_suite,
     run_code_generation_suite,
 )
@@ -76,7 +77,9 @@ def parse_benchmark_request(request: str, available_models: list[str]) -> Benchm
         if "openclaw" in normalized and "openclaw_speed" not in selected_suites:
             selected_suites.append("openclaw_speed")
         selected_suites.append("practical_structured_output")
-    if any(token in normalized for token in ("mbpp",)):
+    if any(token in normalized for token in ("mutated", "contamination")):
+        selected_suites.append("code_generation_mbpp_mutated")
+    elif any(token in normalized for token in ("mbpp",)):
         selected_suites.append("code_generation_mbpp")
     elif any(token in normalized for token in ("code", "kod", "kód", "humaneval", "python", "programovani", "programování")):
         selected_suites.append("code_generation")
@@ -267,9 +270,11 @@ def run_benchmark_bundle(
                 warmup_runs=warmup_runs,
                 progress_callback=progress_callback,
             )
-        elif suite_name in {"code_generation", "code_generation_mbpp"}:
+        elif suite_name in {"code_generation", "code_generation_mbpp", "code_generation_mbpp_mutated"}:
             suite = (
-                load_mbpp_suite(repo_root)
+                load_mbpp_mutated_suite(repo_root)
+                if suite_name == "code_generation_mbpp_mutated"
+                else load_mbpp_suite(repo_root)
                 if suite_name == "code_generation_mbpp"
                 else load_code_generation_suite(repo_root)
             )

@@ -36,6 +36,7 @@ from llm_benchmark.code_generation import (  # noqa: E402
     _aggregate_per_model,
     evaluate_task,
     load_code_generation_suite,
+    load_mbpp_mutated_suite,
     load_mbpp_suite,
 )
 from llm_benchmark.models import GenerationResult, HarnessProvenance  # noqa: E402
@@ -49,7 +50,12 @@ SANDBOX_MEMORY_MB = 1024
 
 def load_tasks(suite_name: str) -> dict[str, Any]:
     """Fixture tasks keyed by id, for whichever code benchmark the run used."""
-    loader = load_mbpp_suite if "mbpp" in suite_name else load_code_generation_suite
+    if "mutated" in suite_name:
+        loader = load_mbpp_mutated_suite
+    elif "mbpp" in suite_name:
+        loader = load_mbpp_suite
+    else:
+        loader = load_code_generation_suite
     return {task.task_id: task for task in loader(REPO_ROOT).tasks}
 
 

@@ -79,6 +79,10 @@ SUITE_REGISTRY: dict[str, dict[str, str]] = {
         "label": "Code generation (MBPP sanitized, 426 problems)",
         "data_path": "data/code/code_generation_mbpp_v1.json",
     },
+    "code_generation_mbpp_mutated": {
+        "label": "Code generation (MBPP mutated — contamination probe, 426 problems)",
+        "data_path": "data/code/code_generation_mbpp_mutated_v1.json",
+    },
     "sustained_throughput": {
         "label": "Sustained throughput (5-min thermal / decode soak)",
         "data_path": "data/performance/sustained_throughput_v1.json",

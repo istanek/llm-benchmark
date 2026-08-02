@@ -23,6 +23,7 @@ from pathlib import Path
 from llm_benchmark.code_generation import (
     evaluate_task,
     load_code_generation_suite,
+    load_mbpp_mutated_suite,
     load_mbpp_suite,
 )
 from llm_benchmark.models import GenerationResult, InferenceMetrics
@@ -35,11 +36,19 @@ SAMPLE_STRIDE = 12
 
 
 def _all_fixture_tasks():
-    return load_code_generation_suite(REPO_ROOT).tasks + load_mbpp_suite(REPO_ROOT).tasks
+    return (
+        load_code_generation_suite(REPO_ROOT).tasks
+        + load_mbpp_suite(REPO_ROOT).tasks
+        + load_mbpp_mutated_suite(REPO_ROOT).tasks
+    )
 
 
 def _tasks():
-    tasks = load_code_generation_suite(REPO_ROOT).tasks + load_mbpp_suite(REPO_ROOT).tasks
+    tasks = (
+        load_code_generation_suite(REPO_ROOT).tasks
+        + load_mbpp_suite(REPO_ROOT).tasks
+        + load_mbpp_mutated_suite(REPO_ROOT).tasks
+    )
     sample = tasks[::SAMPLE_STRIDE]
     # humaneval/32 (poly) and /38 (encode_cyclic) define helpers in the prompt;
     # pin them explicitly so the sample can never drift off them.
@@ -131,3 +140,71 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(_run_all())
+
+
+# --------------------------------------------------------------------- #
+# The mutated fixture must stay a mutation, not a different benchmark    #
+# --------------------------------------------------------------------- #
+
+
+def test_mutants_cover_the_same_problems_as_the_source() -> None:
+    """A contamination probe is only readable as a delta, so the two sets have
+    to be the same problems. A mutant set missing tasks would make the drop
+    partly a difference in which problems were asked."""
+    source = {task.task_id for task in load_mbpp_suite(REPO_ROOT).tasks}
+    mutants = load_mbpp_mutated_suite(REPO_ROOT).tasks
+    covered = {task.metadata["mutation"]["source_task"] for task in mutants}
+    assert covered == source
+
+
+def test_every_mutant_actually_changed_its_entry_point() -> None:
+    """The rename is the main lever. A task that kept its name contributes a
+    familiar cue and silently weakens the probe."""
+    unchanged = [
+        task.task_id
+        for task in load_mbpp_mutated_suite(REPO_ROOT).tasks
+        if task.metadata["entry_point"] == task.metadata["mutation"]["original_entry_point"]
+    ]
+    assert unchanged == []
+
+
+def test_mutant_prompts_never_call_the_original_name() -> None:
+    """The example must call the new name.
+
+    Checked at call sites only, on purpose: entry points like ``sequence`` and
+    ``power`` are ordinary English words, and the problem statement is allowed
+    — required, in fact — to keep using them. Renaming those in prose mangled
+    the sentence and made tasks harder for reasons unrelated to contamination.
+    """
+    import re
+
+    leaked = [
+        task.task_id
+        for task in load_mbpp_mutated_suite(REPO_ROOT).tasks
+        if re.search(
+            rf"\b{re.escape(task.metadata['mutation']['original_entry_point'])}\b\s*\(",
+            task.prompt,
+        )
+    ]
+    assert leaked == []
+
+
+def test_mutant_prompts_end_with_a_newline() -> None:
+    # A prompt ending mid-line breaks a model that echoes it before answering:
+    # the closing docstring quotes end up glued to `def f(...)`, which is an
+    # unterminated string rather than code. Cost 33 tasks when the generator
+    # dropped the trailing newline, and the generator's own validation — which
+    # did not simulate the echo — passed all of them.
+    missing = [
+        task.task_id
+        for task in load_mbpp_mutated_suite(REPO_ROOT).tasks
+        if not task.prompt.endswith("\n")
+    ]
+    assert missing == []
+
+
+def test_mutant_prompts_and_tests_agree_on_the_entry_point() -> None:
+    for task in load_mbpp_mutated_suite(REPO_ROOT).tasks:
+        entry_point = task.metadata["entry_point"]
+        assert entry_point in task.metadata["tests"], task.task_id
+        assert entry_point in task.metadata["canonical_solution"], task.task_id

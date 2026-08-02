@@ -33,6 +33,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from llm_benchmark.code_generation import (  # noqa: E402
     default_reference_scores_path,
     load_code_generation_suite,
+    load_mbpp_mutated_suite,
     load_mbpp_suite,
     run_code_generation_suite,
 )
@@ -65,9 +66,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--backend", default="configs/backends/ollama.yaml")
     parser.add_argument(
         "--benchmark",
-        choices=["humaneval", "mbpp"],
+        choices=["humaneval", "mbpp", "mbpp-mutated"],
         default="humaneval",
-        help="Which code fixture to run (humaneval: 164 problems, mbpp: 426).",
+        help=(
+            "Which code fixture to run (humaneval: 164 problems, mbpp: 426, "
+            "mbpp-mutated: the same 426 problems reworded, as a contamination probe — "
+            "read as a delta against mbpp, not on its own)."
+        ),
     )
     parser.add_argument("--task-limit", type=int, default=None, help="Run only the first N problems (smoke check).")
     parser.add_argument("--samples", type=int, default=1, help="Samples per task; >1 enables pass@k.")
@@ -81,7 +86,10 @@ def main() -> int:
     experiment = load_experiment(REPO_ROOT / args.experiment).experiment
     platform_config = load_platform(REPO_ROOT / args.platform)
     backend_config = load_backend(REPO_ROOT / args.backend)
-    suite = load_mbpp_suite(REPO_ROOT) if args.benchmark == "mbpp" else load_code_generation_suite(REPO_ROOT)
+    suite = {
+        "mbpp": load_mbpp_suite,
+        "mbpp-mutated": load_mbpp_mutated_suite,
+    }.get(args.benchmark, load_code_generation_suite)(REPO_ROOT)
 
     bundle = Path(args.output_dir) if args.output_dir else REPO_ROOT / "results/benchmarks" / make_run_id()
     bundle.mkdir(parents=True, exist_ok=True)
