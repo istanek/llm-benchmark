@@ -120,6 +120,49 @@ Two assumptions remain and are known limits rather than fixed problems:
   openai-compatible backend is not template-identical, and cross-backend
   numbers are not directly comparable.
 
+### Verbosity is a result, not an error term
+
+A pass rate silently absorbs how much a model had to say to earn it. That is
+tolerable while every model in the lineup writes about the same amount, and
+stops being tolerable the moment one does not: gpt-oss-120b writes a median of
+775 decode tokens per MBPP answer against qwen-3.6's 114, so the shared
+1536-token budget cut off 48 of its answers and the suite recorded them as
+code that does not compile.
+
+Raising the budget for the verbose model is the wrong fix. It hides the cost
+instead of reporting it, and makes the comparison unequal in the other
+direction. Verbosity has consequences the project claims to care about —
+decode time, money, context pressure — so it is reported as its own axis:
+
+| model | median tok | p90 | answer density | tok/solved | pass@1 floor–ceiling |
+|---|---|---|---|---|---|
+| qwen-3.6 | 114 | 308 | 97 % | 192 | 85.7–86.3 % |
+| gemma-4 | 317 | 616 | 39 % | 392 | 87.6–87.8 % |
+| nemotron-3 | 332 | 683 | 21 % | 540 | 73.0–73.7 % |
+| gpt-oss-120b | 775 | ≥1536 | 51 % | 1081 | **78.9–89.8 %** |
+
+- **Answer density** is the share of the output that survived extraction. The
+  rest is prose about the answer. qwen-3.6 emits almost nothing else;
+  nemotron-3 spends four fifths of its output on commentary.
+- **tok/solved** is decode tokens per task actually solved — what being right
+  costs. gpt-oss-120b spends 5.6× qwen-3.6's tokens per solved problem, which
+  is visible in wall clock too: 166 minutes against 20 for the same 426 tasks.
+- **The bracket** counts truncated answers as failures (floor) and excludes
+  them (ceiling). For three models it is a fraction of a point wide. For
+  gpt-oss-120b it spans **11 points**, which is the honest statement of what
+  this run established about it: somewhere between third place and first, and
+  the data cannot say where.
+- **`≥` marks a censored quantile.** A p90 sitting on the budget does not mean
+  90 % of answers fit — it means at least 10 % wanted more and the run cannot
+  say how much. That number describes the budget, not the model.
+
+The bracket is deliberately not resolved into a point estimate. Re-generating
+only the truncated tasks at a larger budget would produce one, but it is a
+one-sided correction — tasks that passed get no chance to regress — and the
+project has already published one such estimate as though it settled a
+question. The width stays on the page until a run at an adequate budget
+replaces it.
+
 ### Comparing a new model against stored results
 
 Re-measuring the incumbents for every candidate is not affordable — one MBPP

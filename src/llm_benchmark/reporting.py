@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_benchmark.stats import wilson_interval
+from llm_benchmark.verbosity import collect_verbosity
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -60,6 +61,7 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
     condition_models: dict[str, dict[str, Any]] = {}
     harness_stamps: list[tuple[str | None, bool | None]] = []
     reused_from: list[dict[str, Any]] = []
+    verbosity_by_suite: dict[str, dict[str, dict[str, Any]]] = {}
 
     for run_dir in run_dirs:
         manifest_path = run_dir / "manifest.json"
@@ -95,6 +97,9 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
             continue
 
         suite_scoring[summary["suite"]] = str(summary.get("scoring") or "pass_fail")
+        budget = ((manifest.get("experiment") or {}).get("sampling") or {}).get("max_tokens")
+        for entry in collect_verbosity(rows, budget=budget):
+            verbosity_by_suite.setdefault(summary["suite"], {})[entry["model"]] = entry
         suite_bucket = suite_model_totals.setdefault(summary["suite"], {})
         metrics_by_model: dict[str, dict[str, float]] = {}
         for row in rows:
@@ -258,6 +263,10 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
                 "suite": suite_name,
                 "scoring": suite_scoring.get(suite_name, "pass_fail"),
                 "models": models,
+                # Length, density and cost per model. Kept beside the pass
+                # rates rather than inside them: verbosity is a property to
+                # report, not an error term to absorb.
+                "verbosity": list((verbosity_by_suite.get(suite_name) or {}).values()),
             }
         )
 
@@ -281,6 +290,55 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
             "generations_from": reused_from[0] if reused_from else None,
         },
     }
+
+
+def _verbosity_markdown(suite: dict[str, Any]) -> list[str]:
+    """Length, density and cost, reported next to the pass rate.
+
+    A model that writes five times as much for the same task is making a
+    different trade, and the pass rate alone hides it — or worse, converts it
+    into a quality difference when the budget cuts the answer off.
+    """
+    entries = suite.get("verbosity") or []
+    if not entries:
+        return []
+    entries = sorted(entries, key=lambda item: item.get("median_tokens") or 0)
+    lines = [
+        "### Verbosity and budget",
+        "",
+        "| model | median tok | p90 | answer density | tok/solved | truncated | pass@1 floor–ceiling |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | :---: |",
+    ]
+    censored_models: list[str] = []
+    for entry in entries:
+        p90 = f"{entry['p90_tokens']}"
+        if entry.get("censored"):
+            p90 = f"≥{entry['p90_tokens']}"
+            censored_models.append(entry["model"])
+        per_solved = entry.get("tokens_per_solved")
+        floor, ceiling = entry.get("pass_floor") or 0.0, entry.get("pass_ceiling") or 0.0
+        bracket = f"{floor:.1%}" if entry.get("truncated") == 0 else f"{floor:.1%}–{ceiling:.1%}"
+        lines.append(
+            f"| {entry['model']} | {entry['median_tokens']} | {p90} "
+            f"| {entry.get('answer_density', 0.0):.0%} | {per_solved if per_solved is not None else '-'} "
+            f"| {entry.get('truncated', 0)} | {bracket} |"
+        )
+    lines.append("")
+    lines.append(
+        "_Answer density is the share of the output that survived extraction — the rest is prose about "
+        "the answer. tok/solved is decode tokens spent per task actually solved. The floor counts "
+        "truncated answers as failures; the ceiling excludes them. The true rate is between, and a "
+        "single number in that gap would be a guess._"
+    )
+    if censored_models:
+        lines.append("")
+        lines.append(
+            f"_{', '.join(censored_models)}: the quantile marked ≥ sits on the token budget, so the "
+            "distribution is cut short — the real value is unknown and higher. That is the budget "
+            "showing up in the numbers, not the model._"
+        )
+    lines.append("")
+    return lines
 
 
 def _conditions_markdown(conditions: dict[str, Any]) -> list[str]:
@@ -376,6 +434,7 @@ def render_markdown_report(aggregate: dict[str, Any]) -> str:
         if performance_probe:
             lines.append("")
             lines.append("_Timing probe — pass/fail is not scored; read the latency and throughput columns._")
+        lines.extend(_verbosity_markdown(suite))
         truncated_total = sum(int(m.get("truncated") or 0) for m in suite["models"])
         if truncated_total:
             lines.append("")

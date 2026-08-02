@@ -1464,6 +1464,69 @@ def _overall_rankings_cards_html(ranking: list[dict[str, Any]]) -> str:
 # --------------------------------------------------------------------- #
 
 
+def _render_verbosity_section(suites: list[dict[str, Any]]) -> str:
+    """Length, density and cost per model — an axis, not a footnote.
+
+    A pass rate that silently absorbs verbosity turns "writes a lot" into
+    "codes badly". The floor/ceiling bracket keeps the size of that unknown on
+    the page instead of resolving it by fiat.
+    """
+    rows: list[str] = []
+    censored: list[str] = []
+    for suite in suites:
+        for entry in sorted(suite.get("verbosity") or [], key=lambda item: item.get("median_tokens") or 0):
+            p90 = str(entry.get("p90_tokens"))
+            if entry.get("censored"):
+                p90 = "&ge;" + p90
+                censored.append(entry["model"])
+            floor = entry.get("pass_floor") or 0.0
+            ceiling = entry.get("pass_ceiling") or 0.0
+            bracket = _fmt_pct(floor) if not entry.get("truncated") else f"{_fmt_pct(floor)} – {_fmt_pct(ceiling)}"
+            per_solved = entry.get("tokens_per_solved")
+            rows.append(
+                "<tr>"
+                f"<td>{_esc(entry['model'])}</td>"
+                f"<td class='num'>{_esc(entry.get('median_tokens'))}</td>"
+                f"<td class='num'>{p90}</td>"
+                f"<td class='num'>{_fmt_pct(entry.get('answer_density'))}</td>"
+                f"<td class='num'>{_esc(per_solved) if per_solved is not None else '—'}</td>"
+                f"<td class='num'>{_esc(entry.get('truncated', 0))}</td>"
+                f"<td class='num'>{bracket}</td>"
+                "</tr>"
+            )
+    if not rows:
+        return ""
+
+    parts = ['<section class="card">', "<h2>Verbosity and budget</h2>"]
+    parts.append(
+        '<p class="note">How much each model says, and what it costs. A model that writes five times '
+        "as much for the same task is making a different trade — and when a shared budget cuts its "
+        "answer off, the suite records that as bad code. Reported here so it cannot hide inside the "
+        "pass rate.</p>"
+    )
+    parts.append(
+        "<table><thead><tr><th>Model</th><th class='num'>Median tok</th><th class='num'>p90</th>"
+        "<th class='num'>Answer density</th><th class='num'>Tok / solved</th>"
+        "<th class='num'>Truncated</th><th class='num'>pass@1 floor – ceiling</th>"
+        "</tr></thead><tbody>"
+    )
+    parts.extend(rows)
+    parts.append("</tbody></table>")
+    parts.append(
+        '<p class="note">Answer density is the share of the output that survived extraction; the rest '
+        "is prose about the answer. The floor counts truncated answers as failures, the ceiling "
+        "excludes them — the true rate is between, and a single number in that gap would be a guess.</p>"
+    )
+    if censored:
+        parts.append(
+            f'<p class="note"><strong>{_esc(", ".join(sorted(set(censored))))}</strong>: the quantile '
+            "marked &ge; sits on the token budget, so the distribution is cut short. The real value is "
+            "unknown and higher — that is the budget in the numbers, not the model.</p>"
+        )
+    parts.append("</section>")
+    return "".join(parts)
+
+
 def _render_conditions_section(conditions: dict[str, Any]) -> str:
     """What each model was asked, and which harness asked it.
 
@@ -1735,6 +1798,7 @@ def render_canonical_report_html(
     # ------------------------------------------------------------- #
     # Run conditions — what was asked of each model, and by which harness
     # ------------------------------------------------------------- #
+    body.append(_render_verbosity_section(suites))
     body.append(_render_conditions_section(aggregate.get("conditions") or {}))
 
     # ------------------------------------------------------------- #

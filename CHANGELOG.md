@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Verbosity reported as its own axis** (`llm_benchmark.verbosity`, plus a
+  section in both reports) — median / p90 / p99 answer length, answer density
+  (the share of the output that was the answer rather than prose about it),
+  decode tokens per solved task, and a pass@1 floor–ceiling bracket from
+  truncation. A quantile that lands on the token budget is marked censored
+  rather than reported as a measurement. Written because gpt-oss-120b's score
+  was mostly a statement about the budget: its bracket spans 11 points where
+  the other three span less than one.
 - **First four-model comparison** (`METHODOLOGY.md`) — gemma-4 87.6 %,
   qwen-3.6 85.7 %, gpt-oss-120b 78.9 %, nemotron-3 73.0 % on MBPP at a shared
   1536-token budget with reasoning off. gemma-4 and qwen-3.6 reproduced their
