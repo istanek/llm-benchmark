@@ -62,14 +62,14 @@ bracket was saying, now with a test behind it.
 ### Long-context retrieval, fast profile (2026-08-03)
 
 Bundle `20260803T002533Z-000e8c01`, single-needle retrieval at 4k / 32k / 131k
-tokens by 0 % / 50 % / 100 % depth, 18 cells per model.
+tokens by 0 % / 50 % / 100 % depth, 18 cells per model. Complete: 72 of 72.
 
 | model | retrieved | prefill 4k | 32k | **131k** |
 |---|---|---|---|---|
 | nemotron-3 | 18/18 | 2 031 | 2 541 | **2 498** tok/s |
 | qwen-3.6 | 18/18 | 2 003 | 2 275 | **1 979** tok/s |
 | gpt-oss-120b | 18/18 | 1 431 | 1 698 | **1 240** tok/s |
-| gemma-4 | 17/17 (last cell running) | 678 | 657 | **344** tok/s |
+| gemma-4 | 18/18 | 678 | 657 | **344** tok/s |
 
 **Retrieval does not separate these models.** Every cell passed, at every depth,
 including a full 131k-token context. This is the fourth suite in a row that
