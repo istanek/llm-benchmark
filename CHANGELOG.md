@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Removed vendor branding from the HTML report.** Every generated report
+  carried "NVIDIA | OpenClaw" in the hero, hardcoded, documented nowhere, and
+  inherited from the context the harness was first written in. A report that
+  measures third-party models should not carry a mark suggesting anyone
+  endorsed its conclusions — particularly a public one. The hero now reads
+  `llm-benchmark`, and the `--nvidia-green` CSS variable is `--accent-green`
+  with the same value. The `openclaw_speed` suite keeps its name: it is a key
+  in every stored bundle, and renaming it would orphan those results.
 - **Reports lead with a per-axis summary** — quality, throughput and energy,
   each with its leader and whether the run separated anyone, printed above the
   overall ranking in both markdown and HTML. On the current lineup the model

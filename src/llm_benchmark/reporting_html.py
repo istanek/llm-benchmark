@@ -105,7 +105,9 @@ _CSS = """
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
   --shadow-md: 0 4px 16px rgba(0,0,0,0.6);
   --shadow-lg: 0 20px 60px rgba(0,0,0,0.7);
-  --nvidia-green: #76b900;
+  /* Renamed from --nvidia-green: it is the accent colour of this
+     report, not a vendor's mark. The value is unchanged. */
+  --accent-green: #76b900;
 }
 * { box-sizing: border-box; }
 html, body { background: var(--bg); }
@@ -149,7 +151,6 @@ small, .meta { color: var(--fg-muted); font-size: 13px; }
   color: var(--fg-muted);
   z-index: 2;
 }
-.hero .hero-brand .nv { color: var(--nvidia-green); }
 .hero .hero-inner {
   position: relative; z-index: 1;
   max-width: 1180px; margin: 0 auto; padding: 0 24px;
@@ -159,7 +160,7 @@ small, .meta { color: var(--fg-muted); font-size: 13px; }
 .hero .hero-breadcrumb {
   font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--nvidia-green);
+  color: var(--accent-green);
   margin-bottom: 10px;
 }
 .hero h1 { color: #e2e8f0; font-size: 52px; }
@@ -1727,7 +1728,12 @@ def render_canonical_report_html(
     # Hero banner
     # ------------------------------------------------------------- #
     body.append('<section class="hero">')
-    body.append('<div class="hero-brand"><span class="nv">NVIDIA</span> | OpenClaw</div>')
+    # No vendor branding. It read "NVIDIA | OpenClaw" — left over from the
+    # context this harness was first written in, undocumented anywhere, and
+    # stamped on every report the project publishes. A report that measures
+    # third-party models should not carry a mark that suggests anyone endorsed
+    # its conclusions.
+    body.append('<div class="hero-brand">llm-benchmark</div>')
     body.append('<div class="hero-inner">')
     body.append('<div class="hero-main">')
     body.append('<div class="hero-breadcrumb">LLM BENCHMARK</div>')
@@ -2629,7 +2635,12 @@ def render_custom_summary_html(summary: dict[str, Any]) -> str:
         'linear-gradient(135deg, #060d18 0%, #071520 40%, #061a1a 100%);'
         'border-bottom: 1px solid rgba(34,211,238,0.3);">'
     )
-    body.append('<div class="hero-brand"><span class="nv">NVIDIA</span> | OpenClaw</div>')
+    # No vendor branding. It read "NVIDIA | OpenClaw" — left over from the
+    # context this harness was first written in, undocumented anywhere, and
+    # stamped on every report the project publishes. A report that measures
+    # third-party models should not carry a mark that suggests anyone endorsed
+    # its conclusions.
+    body.append('<div class="hero-brand">llm-benchmark</div>')
     body.append('<div class="hero-inner">')
     body.append('<div class="hero-main">')
     body.append('<div class="hero-breadcrumb">LLM BENCHMARK — CUSTOM RUN</div>')
