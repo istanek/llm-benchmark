@@ -207,3 +207,70 @@ def test_energy_reaches_the_report(tmp_path: Path) -> None:
     # The lowest baseline, not the first encountered: later models carry the
     # previous one's residual draw.
     assert "host baseline 13.5 W" in report
+
+
+def _priced_suite(leader_energy: float, rival_energy: float, leader_rate=(29, 30), rival_rate=(29, 30)):
+    """Two models tied on quality, priced differently."""
+    from llm_benchmark.stats import wilson_interval
+
+    models = []
+    for name, (passes, total), joules in (
+        ("leader", leader_rate, leader_energy),
+        ("rival", rival_rate, rival_energy),
+    ):
+        low, high = wilson_interval(passes, total)
+        models.append(
+            {
+                "model": name,
+                "passes": passes,
+                "total": total,
+                "pass_rate": passes / total,
+                "ci_low": low,
+                "ci_high": high,
+                "energy": {"joules_per_solved_task": joules, "samples": 10},
+            }
+        )
+    return {"suite": "code_v1", "scoring": "pass_fail", "models": models}
+
+
+def test_a_tie_on_quality_is_decided_by_cost() -> None:
+    """The ranking crowns whoever is a fraction of a point ahead, even when the
+    interval says that fraction is noise and the runner-up costs 15x less."""
+    from llm_benchmark.reporting import cost_aware_pick
+
+    aggregate = {"suites": [_priced_suite(leader_energy=1869.0, rival_energy=125.0)]}
+    pick = cost_aware_pick(aggregate, [{"model": "leader"}, {"model": "rival"}])
+    assert pick is not None
+    assert pick["recommended"] == "rival"
+    assert round(pick["ratio"]) == 15
+
+
+def test_the_leader_keeps_the_recommendation_when_it_is_also_cheapest() -> None:
+    from llm_benchmark.reporting import cost_aware_pick
+
+    aggregate = {"suites": [_priced_suite(leader_energy=125.0, rival_energy=1869.0)]}
+    assert cost_aware_pick(aggregate, [{"model": "leader"}, {"model": "rival"}]) is None
+
+
+def test_a_model_outside_the_leaders_interval_is_never_recommended_on_price() -> None:
+    """Quality first: cheap and clearly worse is not a recommendation."""
+    from llm_benchmark.reporting import cost_aware_pick
+
+    aggregate = {
+        "suites": [
+            _priced_suite(
+                leader_energy=1869.0, rival_energy=125.0,
+                leader_rate=(400, 400), rival_rate=(200, 400),
+            )
+        ]
+    }
+    assert cost_aware_pick(aggregate, [{"model": "leader"}, {"model": "rival"}]) is None
+
+
+def test_no_energy_data_means_no_cost_claim() -> None:
+    from llm_benchmark.reporting import cost_aware_pick
+
+    suite = _priced_suite(leader_energy=1869.0, rival_energy=125.0)
+    for model in suite["models"]:
+        model.pop("energy")
+    assert cost_aware_pick({"suites": [suite]}, [{"model": "leader"}, {"model": "rival"}]) is None

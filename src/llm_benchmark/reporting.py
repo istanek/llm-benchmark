@@ -864,9 +864,19 @@ def render_cli_benchmark_summary(
 
     if ranking:
         winner = ranking[0]
-        lines.append(
-            f"Recommendation: {winner['model']} is the current default pick because it achieved the strongest combined result across reliability and speed."
-        )
+        pick = cost_aware_pick(aggregate, ranking)
+        if pick:
+            ratio = f"{pick['ratio']:.0f}x" if pick.get("ratio") else "less"
+            lines.append(
+                f"Recommendation: {pick['recommended']}. {winner['model']} leads the score, but "
+                f"{pick['recommended']} is statistically tied with it on {pick['suite']} and costs "
+                f"{ratio} less energy per solved task "
+                f"({pick['recommended_cost']:.0f} J vs {pick['leader_cost']:.0f} J)."
+            )
+        else:
+            lines.append(
+                f"Recommendation: {winner['model']} leads the score in this run."
+            )
     lines.append(f"Full report saved to: {report_path}")
     return "\n".join(lines)
 
@@ -986,6 +996,72 @@ def _suite_commentary(suite_name: str, suite: dict[str, Any]) -> str:
         return " ".join(bits)
 
     return ""
+
+
+def cost_aware_pick(aggregate: dict[str, Any], ranking: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Who to actually use, given that a tie on quality is not a tie on cost.
+
+    The overall ranking sorts by score, so it crowns whichever model is a
+    fraction of a point ahead — even when the interval says that fraction is
+    noise, and even when the runner-up costs an order of magnitude less to run.
+    On the four-model bundle it named gemma-4 the winner over qwen-3.6, which
+    it cannot separate statistically and which spends fifteen times the energy
+    per solved task.
+
+    So: find every model whose interval overlaps the leader's, and among that
+    tied group prefer the cheapest measured. Quality still comes first — a
+    model outside the leader's interval is never recommended on price.
+    """
+    if not ranking:
+        return None
+    # The most-scored quality suite: the one with the tightest intervals and
+    # therefore the most meaningful notion of "tied".
+    candidates = [
+        suite
+        for suite in aggregate.get("suites") or []
+        if not _is_performance_probe(suite) and suite.get("models")
+    ]
+    if not candidates:
+        return None
+    suite = max(candidates, key=lambda s: sum(int(m.get("total") or 0) for m in s["models"]))
+    by_name = {model["model"]: model for model in suite["models"]}
+
+    leader_name = ranking[0]["model"]
+    leader = by_name.get(leader_name)
+    if not leader:
+        return None
+
+    tied = [
+        model
+        for model in suite["models"]
+        if float(model.get("ci_low") or 0.0) <= float(leader.get("ci_high") or 1.0)
+        and float(model.get("ci_high") or 1.0) >= float(leader.get("ci_low") or 0.0)
+    ]
+    priced = [
+        model
+        for model in tied
+        if isinstance(model.get("energy"), dict)
+        and model["energy"].get("joules_per_solved_task")
+    ]
+    if len(priced) < 2:
+        return None
+
+    cheapest = min(priced, key=lambda m: m["energy"]["joules_per_solved_task"])
+    if cheapest["model"] == leader_name:
+        return None
+
+    leader_cost = (leader.get("energy") or {}).get("joules_per_solved_task")
+    cheap_cost = cheapest["energy"]["joules_per_solved_task"]
+    ratio = leader_cost / cheap_cost if leader_cost and cheap_cost else None
+    return {
+        "suite": suite["suite"],
+        "leader": leader_name,
+        "recommended": cheapest["model"],
+        "tied": [model["model"] for model in tied],
+        "ratio": ratio,
+        "leader_cost": leader_cost,
+        "recommended_cost": cheap_cost,
+    }
 
 
 def _verdict_paragraph(

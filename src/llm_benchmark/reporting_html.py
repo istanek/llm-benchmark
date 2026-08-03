@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from llm_benchmark.reporting import (
+    cost_aware_pick,
     _find_suite,
     _is_performance_probe,
     _overall_rank_rows,
@@ -1782,11 +1783,24 @@ def render_canonical_report_html(
                 "<p>Single-model run — no comparison available. See the "
                 "per-suite breakdown below for details.</p>"
             )
-        body.append(
-            f'<div class="recommendation"><strong>Recommendation:</strong> '
-            f"<code>{_esc(winner_name)}</code> is the current default pick — "
-            "strongest combined result across reliability and speed.</div>"
-        )
+        pick = cost_aware_pick(aggregate, ranking)
+        if pick:
+            ratio = f"{pick['ratio']:.0f}x" if pick.get("ratio") else "less"
+            body.append(
+                f'<div class="recommendation"><strong>Recommendation:</strong> '
+                f"<code>{_esc(pick['recommended'])}</code>. "
+                f"<code>{_esc(winner_name)}</code> leads the score, but "
+                f"<code>{_esc(pick['recommended'])}</code> is statistically tied with it on "
+                f"{_esc(pick['suite'])} — their intervals overlap — and costs {ratio} less energy "
+                f"per solved task ({_fmt_num(pick['recommended_cost'])} J against "
+                f"{_fmt_num(pick['leader_cost'])} J). A lead inside the interval is not a "
+                "difference; the cost is.</div>"
+            )
+        else:
+            body.append(
+                f'<div class="recommendation"><strong>Recommendation:</strong> '
+                f"<code>{_esc(winner_name)}</code> leads the score in this run.</div>"
+            )
         body.append("</section>")
 
     # ------------------------------------------------------------- #

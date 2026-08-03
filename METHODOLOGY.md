@@ -260,6 +260,30 @@ generator's own validation, and the reason is worth keeping:
 Both are the same lesson this repo keeps relearning: **validate through the
 path the real thing takes**, not the path that is convenient to check.
 
+### What the report recommends, and why it is not the top of the ranking
+
+The overall ranking sorts by a weighted score, so it crowns whichever model is
+a fraction of a point ahead. On the four-model bundle that was gemma-4 over
+qwen-3.6 — two models this project cannot separate statistically, one of which
+spends fifteen times the energy per solved task. The report said gemma-4 was
+"the current default pick, strongest combined result across reliability and
+speed", in a run where no speed suite had been executed at all: the speed
+weight silently dropped out and the sentence claimed an axis that was never
+measured.
+
+Both are fixed. The recommendation now takes the leader's interval, finds
+every model that overlaps it, and among that tied group recommends the
+cheapest measured:
+
+> **Recommendation: qwen-3.6.** gemma-4 leads the score, but qwen-3.6 is
+> statistically tied with it on `code_generation_mbpp_v1` — their intervals
+> overlap — and costs 15x less energy per solved task (125 J against 1869 J).
+> A lead inside the interval is not a difference; the cost is.
+
+Quality still comes first. A model outside the leader's interval is never
+recommended on price, however cheap it is, and with no energy data the report
+falls back to naming the score leader and says only that.
+
 ### Preflight
 
 Every run verifies what it needs before loading the first model: fixtures

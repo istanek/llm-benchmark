@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The report recommends on cost when quality ties.** The overall ranking
+  sorts by score, so it named gemma-4 the default pick over qwen-3.6 — a model
+  it cannot separate statistically and which costs 15x less energy per solved
+  task. The recommendation now takes every model whose interval overlaps the
+  leader's and prefers the cheapest measured, stating both numbers. Quality
+  still comes first: a model outside the leader's interval is never
+  recommended on price.
+- **The verdict no longer claims axes it did not measure.** It read "strongest
+  combined result across reliability and speed" in a run with no speed suite,
+  where the 0.20 speed weight had silently dropped out of the score.
 - **Energy per solved task** (`llm_benchmark.energy`, wired into the code
   suite) — GPU power sampled while each model answers, integrated
   trapezoidally over sample timestamps, reported as J/solved and tasks/Wh
