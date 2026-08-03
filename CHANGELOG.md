@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **First contamination result** (`RESULTS.md`) — no model in the lineup shows
+  a confirmed signal on MBPP. gemma-4, qwen-3.6 and nemotron-3 drop by under
+  2.5 points on the reworded set (p = 0.71 / 0.86 / 0.21). gpt-oss-120b drops
+  5.2 points at p = 0.013, but rewording also pushed its truncation from 52 to
+  73 answers; on the 336 tasks neither run truncated, the drop is p = 0.099.
+  The apparent signal is largely a verbose model meeting a fixed budget.
+- **Grounding v2 turned out to be saturated as well** — 14/14 for three models
+  and 13/14 for nemotron-3 once the scorer defects were fixed. The spread
+  reported earlier in the day was mostly those defects, not the models.
 - **Non-English answers are `unscorable`, not failures.** Every phrase list in
   the grounding scorer is English, so a correct refusal in Czech, German,
   Spanish, Russian or Japanese scored as a hallucination — a verdict about the

@@ -59,6 +59,52 @@ nemotron-3 is alone at the bottom. Its "third place, 78.9 %" is a fact about a
 1536-token budget, not about the model — which is what the floor-ceiling
 bracket was saying, now with a test behind it.
 
+### Contamination probe (2026-08-03)
+
+The same 426 problems reworded — renamed entry points, paraphrased prose,
+recomputed examples — paired per task against the originals. A model that
+recalled the benchmark rather than solving it should drop when the surface
+changes.
+
+| model | original | mutated | flips | McNemar p |
+|---|---|---|---|---|
+| gemma-4 | 87.6 % | 86.9 % | 16 / 13 | 0.71 |
+| qwen-3.6 | 85.7 % | 85.2 % | 17 / 15 | 0.86 |
+| nemotron-3 | 73.0 % | 70.7 % | 31 / 21 | 0.21 |
+| gpt-oss-120b | 78.9 % | 73.7 % | 47 / 25 | **0.013** |
+
+**Only gpt-oss-120b drops significantly — and the drop does not survive
+control.** Rewording made it more verbose (median 775 → 838 decode tokens),
+which pushed its truncation count from 52 to 73. Restricted to the 336 tasks
+where neither run was cut off, the same comparison gives 92.0 % against
+88.7 %, 24 / 13 flips, **p = 0.099**.
+
+So the honest reading is: **no model in this lineup shows a confirmed
+contamination signal on MBPP.** What looked like one is largely a verbose
+model spending more tokens on an unfamiliar problem statement and running into
+a fixed budget — the same confound that has distorted this model's numbers
+twice before.
+
+This is a negative result and it is worth stating plainly. It does not mean
+these models never memorised anything: the mutation changes the surface of a
+problem, not the algorithm it needs, so a model that drilled the *approach*
+transfers legitimately and this probe cannot see it. What it rules out is
+recall of the wording — which is the thing a public benchmark most obviously
+leaks.
+
+### Grounding v2 is saturated too (2026-08-03)
+
+After the scorer fixes, the harder fixture reads: qwen-3.6 14/14, gpt-oss-120b
+14/14, gemma-4 14/14, nemotron-3 13/14. Zero unscorable answers — every model
+answered in English.
+
+Earlier in the day this fixture appeared to discriminate (14 / 13 / 11). It did
+not: two of those three "failures" were defects in the scorer, and the third
+was a fixture whose context omitted the entity its own question asked about.
+**A fixture built specifically to be harder is answered almost perfectly by
+every model in the lineup**, so the reliability axis still cannot rank them.
+Fourteen tasks is also too few to detect anything smaller than a landslide.
+
 **What this does and does not support.** gemma-4 and qwen-3.6 are tied on code
 and cannot be separated by this data. nemotron-3 is clearly behind on both
 axes. gpt-oss-120b's code number is a floor in a way the others' are not —
