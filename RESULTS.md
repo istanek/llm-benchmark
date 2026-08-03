@@ -26,9 +26,19 @@ single greedy sample per task. Bundle `20260802T051407Z-51ad314a-final`.
 | gpt-oss-120b | **78.9 %** | 75-82 % | floor — 48 answers truncated |
 | nemotron-3 | **73.0 %** | 69-77 % | clearly last |
 
-Grounding, 14 near-miss tasks (`hallucination_grounding_v2`, provisional):
-qwen-3.6 14/14, nemotron-3 13/14, gpt-oss-120b 11/14. The v1 fixture gives
-100 % to everyone and answers nothing.
+**Cost, measured on a 30-task subset:** qwen-3.6 125 J per solved task,
+nemotron-3 420 J, gpt-oss-120b 1 290 J, gemma-4 1 869 J. Decode throughput
+74 / 75 / 38 / 10 tok/s in the same order. Long-context prefill at 131k: 2 498 / 1 979 / 1 240 /
+344 tok/s.
+
+**Every reliability suite is saturated.** Grounding v1 gives 100 % to all four.
+Grounding v2, built specifically to be harder, gives 14/14 to three of them and
+13/14 to nemotron-3. Structured output: 6/6 to three, 5/6 to qwen-3.6.
+Long-context retrieval: 18/18 to all four. None of them ranks this lineup.
+
+So the quality side rests entirely on the code suite, and the cost side is
+where the differences are: the model leading on accuracy is last on every cost
+axis, and its lead is inside the interval.
 
 **Paired comparison (added 2026-08-02).** Every model answered the same 426
 tasks, so the outcomes can be paired per task instead of comparing marginal

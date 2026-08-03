@@ -25,6 +25,12 @@ Initial model lineup:
 - nemotron-3
 - nemotron-3-super
 
+Measured since 2026-08-02, after the harness stopped assuming the lineup:
+
+- gpt-oss-120b (reasoning-capable, MXFP4, added as the first model outside the
+  original three — and the one whose first run exposed a scoring bug that had
+  been invisible for as long as only single-fence models were measured)
+
 ## Evaluation categories
 
 ### Quality
@@ -210,10 +216,13 @@ contradictory-source tasks: every value in `conflicting_values` must appear
 they clash is not a pass — which is precisely what nemotron-3 does, presenting
 one version as the answer and the other in parentheses.
 
-Preliminary v2 results (14 tasks, so intervals are wide): qwen-3.6 14/14,
-nemotron-3 13/14, gpt-oss-120b 11/14 — against 100 % for all three on v1. The
-fixture discriminates; v1 does not. It is still marked provisional, and its
-numbers are data rather than a published claim about any model.
+Final v2 results after the fixes above: qwen-3.6, gpt-oss-120b and gemma-4 all
+14/14, nemotron-3 13/14. **The fixture is saturated too.** An earlier reading
+of 14 / 13 / 11 looked like discrimination and was mostly the scorer defects
+listed above — gpt-oss-120b gained three tasks from the fixes alone. Fourteen
+tasks cannot detect anything smaller than a landslide in any case. The suite
+stays provisional and its numbers are data, not a published claim about any
+model.
 
 ### Contamination: telling recall apart from ability
 
