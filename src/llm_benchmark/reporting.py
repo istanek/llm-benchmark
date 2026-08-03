@@ -479,6 +479,8 @@ def render_markdown_report(aggregate: dict[str, Any]) -> str:
         "",
     ]
 
+    lines.extend(_axis_summary_markdown(aggregate))
+
     for suite in aggregate["suites"]:
         performance_probe = _is_performance_probe(suite)
         lines.extend(
@@ -1044,6 +1046,116 @@ def _suite_commentary(suite_name: str, suite: dict[str, Any]) -> str:
         return " ".join(bits)
 
     return ""
+
+
+def axis_summary(aggregate: dict[str, Any]) -> list[dict[str, Any]]:
+    """Each measured axis, its leader, and whether the run separated anyone.
+
+    A single composite score always buries the disagreement between axes, and
+    on this lineup the disagreement *is* the answer: qwen-3.6 and gemma-4 are
+    statistically inseparable on accuracy, differ sevenfold in throughput and
+    fifteenfold in energy per solved task. Ranking them 1st and 3rd by weighted
+    sum is a preference asserted as a finding.
+
+    So the report leads with the axes and keeps the composite below them,
+    labelled as the weighting it is.
+    """
+    axes: list[dict[str, Any]] = []
+
+    quality_suites = [
+        suite
+        for suite in aggregate.get("suites") or []
+        if not _is_performance_probe(suite) and suite.get("models")
+    ]
+    if quality_suites:
+        suite = max(quality_suites, key=lambda s: sum(int(m.get("total") or 0) for m in s["models"]))
+        models = sorted(suite["models"], key=lambda m: -float(m.get("pass_rate") or 0.0))
+        leader = models[0]
+        tied = [
+            model["model"]
+            for model in models
+            if float(model.get("ci_low") or 0.0) <= float(leader.get("ci_high") or 1.0)
+            and float(model.get("ci_high") or 1.0) >= float(leader.get("ci_low") or 0.0)
+        ]
+        axes.append(
+            {
+                "axis": "quality",
+                "detail": f"{suite['suite']}, n={leader.get('total')}",
+                "leader": leader["model"],
+                "value": f"{float(leader.get('pass_rate') or 0.0):.1%}",
+                "tied_with_leader": [name for name in tied if name != leader["model"]],
+                "separated": len(tied) == 1,
+            }
+        )
+
+    # Local rather than imported from reporting_html: that module imports this
+    # one, and closing the loop would be a circular import.
+    names = []
+    for suite in aggregate.get("suites") or []:
+        for model in suite.get("models") or []:
+            if model.get("model") and model["model"] not in names:
+                names.append(model["model"])
+    _, toks, source = speed_signals(aggregate, names)
+    if toks:
+        leader_name = max(toks, key=lambda name: toks[name])
+        slowest = min(toks, key=lambda name: toks[name])
+        ratio = toks[leader_name] / toks[slowest] if toks[slowest] else None
+        axes.append(
+            {
+                "axis": "throughput",
+                "detail": f"decode tok/s, from {source}",
+                "leader": leader_name,
+                "value": f"{toks[leader_name]:.0f} tok/s",
+                "spread": f"{ratio:.1f}x over {slowest}" if ratio and ratio > 1.05 else None,
+                "separated": bool(ratio and ratio > 1.05),
+            }
+        )
+
+    energy = {
+        model["model"]: model["energy"]["joules_per_solved_task"]
+        for suite in aggregate.get("suites") or []
+        for model in suite.get("models") or []
+        if isinstance(model.get("energy"), dict) and model["energy"].get("joules_per_solved_task")
+    }
+    if energy:
+        cheapest = min(energy, key=lambda name: energy[name])
+        dearest = max(energy, key=lambda name: energy[name])
+        ratio = energy[dearest] / energy[cheapest] if energy[cheapest] else None
+        axes.append(
+            {
+                "axis": "energy",
+                "detail": "joules per solved task",
+                "leader": cheapest,
+                "value": f"{energy[cheapest]:.0f} J",
+                "spread": f"{ratio:.0f}x cheaper than {dearest}" if ratio and ratio > 1.05 else None,
+                "separated": bool(ratio and ratio > 1.05),
+            }
+        )
+    return axes
+
+
+def _axis_summary_markdown(aggregate: dict[str, Any]) -> list[str]:
+    axes = axis_summary(aggregate)
+    if not axes:
+        return []
+    lines = ["## Where they differ", "", "| axis | best | measured | separated? |", "| --- | --- | --- | --- |"]
+    for axis in axes:
+        if axis["axis"] == "quality" and not axis["separated"]:
+            verdict = "no — tied with " + ", ".join(axis["tied_with_leader"])
+        elif axis.get("spread"):
+            verdict = "yes — " + axis["spread"]
+        else:
+            verdict = "yes" if axis["separated"] else "no"
+        lines.append(f"| {axis['axis']} ({axis['detail']}) | {axis['leader']} | {axis['value']} | {verdict} |")
+    lines.append("")
+    lines.append(
+        "_Read these before the overall score below. The score applies fixed weights "
+        f"({_QUALITY_WEIGHT:.0%} quality / {_SPEED_WEIGHT:.0%} speed) that are a stated preference, "
+        "not a measurement, and any single number has to bury the disagreement between axes — which "
+        "on some lineups is the entire answer._"
+    )
+    lines.append("")
+    return lines
 
 
 def cost_aware_pick(aggregate: dict[str, Any], ranking: list[dict[str, Any]]) -> dict[str, Any] | None:

@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from llm_benchmark.reporting import (
+    axis_summary,
     cost_aware_pick,
     _find_suite,
     _is_performance_probe,
@@ -1465,6 +1466,48 @@ def _overall_rankings_cards_html(ranking: list[dict[str, Any]]) -> str:
 # --------------------------------------------------------------------- #
 
 
+def _render_axis_summary(aggregate: dict[str, Any]) -> str:
+    """The axes, before any single number that merges them."""
+    axes = axis_summary(aggregate)
+    if not axes:
+        return ""
+
+    rows: list[str] = []
+    for axis in axes:
+        if axis["axis"] == "quality" and not axis["separated"]:
+            verdict = "tied with " + ", ".join(axis["tied_with_leader"])
+            css = "tie"
+        elif axis.get("spread"):
+            verdict = axis["spread"]
+            css = "sep"
+        else:
+            verdict = "separated" if axis["separated"] else "not separated"
+            css = "sep" if axis["separated"] else "tie"
+        rows.append(
+            "<tr>"
+            f"<td><strong>{_esc(axis['axis'])}</strong><br><span class='muted'>{_esc(axis['detail'])}</span></td>"
+            f"<td>{_esc(axis['leader'])}</td>"
+            f"<td class='num'>{_esc(axis['value'])}</td>"
+            f"<td class='{css}'>{_esc(verdict)}</td>"
+            "</tr>"
+        )
+
+    parts = ['<section class="card accent">', "<h2>Where they differ</h2>"]
+    parts.append(
+        '<p class="note">Each axis on its own, before anything merges them. A model can lead one '
+        "and trail another by a wide margin — on some lineups that disagreement is the entire "
+        "answer, and any single score has to bury it.</p>"
+    )
+    parts.append(
+        "<table><thead><tr><th>Axis</th><th>Best</th><th class='num'>Measured</th>"
+        "<th>Did the run separate them?</th></tr></thead><tbody>"
+    )
+    parts.extend(rows)
+    parts.append("</tbody></table>")
+    parts.append("</section>")
+    return "".join(parts)
+
+
 def _render_energy_section(suites: list[dict[str, Any]]) -> str:
     """Joules per solved task — the cost of a result, beside the result."""
     rows: list[str] = []
@@ -1806,8 +1849,15 @@ def render_canonical_report_html(
     # ------------------------------------------------------------- #
     # Overall ranking table + bar chart
     # ------------------------------------------------------------- #
+    body.append(_render_axis_summary(aggregate))
+
     if ranking:
         body.append("<h2>Overall ranking</h2>")
+        body.append(
+            '<p class="note">A weighted sum, not a measurement: quality and speed are combined '
+            "using fixed weights chosen by whoever configured this harness. Where the axes above "
+            "disagree, they are the more informative reading.</p>"
+        )
         body.append('<table aria-label="Overall ranking">')
         body.append(
             "<thead><tr>"

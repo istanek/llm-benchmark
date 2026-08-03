@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Reports lead with a per-axis summary** — quality, throughput and energy,
+  each with its leader and whether the run separated anyone, printed above the
+  overall ranking in both markdown and HTML. On the current lineup the model
+  that leads quality is last on both cost axes and its lead is inside the
+  interval, which no single score can express; the composite is now labelled
+  as a weighted sum whose weights are a preference rather than a measurement.
 - **Overall score reweighted to 0.70 quality / 0.30 speed**, and the speed
   component now actually has data. It was read only from the `openclaw_speed`
   suite, which has not run in any recent bundle, so every model scored 0.0 on

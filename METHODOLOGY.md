@@ -260,6 +260,27 @@ generator's own validation, and the reason is worth keeping:
 Both are the same lesson this repo keeps relearning: **validate through the
 path the real thing takes**, not the path that is convenient to check.
 
+### The report leads with axes, not with a winner
+
+Every report opens with **Where they differ**: one row per measured axis, its
+leader, and whether the run separated anyone at all.
+
+| axis | best | measured | separated? |
+|---|---|---|---|
+| quality (MBPP, n=30) | gemma-4 | 96.7 % | no — tied with qwen-3.6, gpt-oss-120b, nemotron-3 |
+| throughput (decode tok/s) | nemotron-3 | 75 tok/s | yes — 7.4x over gemma-4 |
+| energy (J per solved task) | qwen-3.6 | 125 J | yes — 15x cheaper than gemma-4 |
+
+This is the honest shape of the result for this lineup, and no single number
+can carry it: the model that leads on quality is last on both cost axes, and
+the quality lead is inside the interval anyway. A composite score has to pick
+a winner, and picking one here means choosing a preference and presenting it
+as a finding.
+
+The overall score is still computed and still shown — below the axes, and
+labelled as a weighted sum whose weights were chosen by whoever configured the
+harness. Where the axes disagree, the axes are the more informative reading.
+
 ### The overall score, and what it weighs
 
 `_QUALITY_WEIGHT = 0.70`, `_SPEED_WEIGHT = 0.30`. These are a stated

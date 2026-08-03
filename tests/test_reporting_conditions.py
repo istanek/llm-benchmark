@@ -343,3 +343,62 @@ def test_no_speed_signal_redistributes_the_weight_to_quality() -> None:
         model["avg_ttft_ms"] = None
     ranking = _overall_rank_rows({"suites": [suite]}, ["m"])
     assert ranking[0]["overall_score"] == ranking[0]["quality_score"] == 0.9
+
+
+def test_the_axis_summary_marks_a_quality_tie_rather_than_a_winner() -> None:
+    """A composite score always names someone first. The axis view says when
+    the run did not actually separate anyone, which is the more useful fact."""
+    from llm_benchmark.reporting import axis_summary
+    from llm_benchmark.stats import wilson_interval
+
+    models = []
+    for name, passes in (("a", 29), ("b", 28)):
+        low, high = wilson_interval(passes, 30)
+        models.append(
+            {"model": name, "passes": passes, "total": 30, "pass_rate": passes / 30,
+             "ci_low": low, "ci_high": high, "avg_tokens_per_s": 50.0}
+        )
+    axes = axis_summary({"suites": [{"suite": "code_v1", "scoring": "pass_fail", "models": models}]})
+    quality = next(axis for axis in axes if axis["axis"] == "quality")
+    assert quality["separated"] is False
+    assert quality["tied_with_leader"] == ["b"]
+
+
+def test_the_axis_summary_reports_the_spread_where_a_run_does_separate() -> None:
+    from llm_benchmark.reporting import axis_summary
+    from llm_benchmark.stats import wilson_interval
+
+    models = []
+    for name, tps in (("fast", 75.0), ("slow", 10.0)):
+        low, high = wilson_interval(29, 30)
+        models.append(
+            {"model": name, "passes": 29, "total": 30, "pass_rate": 29 / 30,
+             "ci_low": low, "ci_high": high, "avg_tokens_per_s": tps,
+             "energy": {"joules_per_solved_task": 125.0 if name == "fast" else 1869.0, "samples": 5}}
+        )
+    axes = axis_summary({"suites": [{"suite": "code_v1", "scoring": "pass_fail", "models": models}]})
+    throughput = next(axis for axis in axes if axis["axis"] == "throughput")
+    energy = next(axis for axis in axes if axis["axis"] == "energy")
+    assert throughput["leader"] == "fast" and "7.5x" in throughput["spread"]
+    assert energy["leader"] == "fast" and "15x" in energy["spread"]
+
+
+def test_axes_appear_before_the_overall_score_in_the_report(tmp_path: Path) -> None:
+    """Ordering is the point: the merged number reads as the answer when it is
+    printed first."""
+    run_dir = tmp_path / "code_generation-m"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(json.dumps({**MANIFEST, "provenance": PROVENANCE}))
+    (run_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "suite": "code_generation_v1",
+                "suite_version": "0.3.0",
+                "models": [{"model": "m", "passes": 9, "total": 10}],
+            }
+        )
+    )
+    (run_dir / "results.jsonl").write_text("")
+    report = render_markdown_report(aggregate_runs(tmp_path))
+    assert "## Where they differ" in report
+    assert report.index("## Where they differ") < report.index("## code_generation_v1")
