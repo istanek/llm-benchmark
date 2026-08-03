@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Energy per solved task** (`llm_benchmark.energy`, wired into the code
+  suite) — GPU power sampled while each model answers, integrated
+  trapezoidally over sample timestamps, reported as J/solved and tasks/Wh
+  with the host's idle draw alongside. First result: qwen-3.6 and gemma-4
+  score identically on a 30-task subset and gemma-4 costs 15x the energy
+  (1 869 J vs 125 J per solved task, 1.9 vs 28.8 tasks/Wh). The gap is wall
+  clock rather than draw — power spans 1.5x across the lineup, time spans
+  10x — so energy is throughput in other units, and the fix for an expensive
+  model is a faster model.
 - **Long-context results** (`RESULTS.md`) — every model retrieves a needle at
   every depth up to 131k tokens, so retrieval joins grounding and structured
   output as a suite that cannot rank this lineup. Prefill throughput at 131k

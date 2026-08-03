@@ -59,6 +59,44 @@ nemotron-3 is alone at the bottom. Its "third place, 78.9 %" is a fact about a
 1536-token budget, not about the model — which is what the floor-ceiling
 bracket was saying, now with a test behind it.
 
+### Energy per solved task (2026-08-03)
+
+Measured, not modelled: GPU power sampled at 2 Hz while each model answered
+and integrated over its own window. Bundle `20260803T014417Z-e8f10ced`, MBPP,
+30 tasks per model — a subset, because power is a steady-state property and
+does not need 426 tasks to establish. Idle draw on this host: **25.4 W**.
+
+| model | pass@1 (n=30) | J / solved | above idle | tasks / Wh | avg W | wall clock |
+|---|---|---|---|---|---|---|
+| qwen-3.6 | 97 % | **125 J** | 77 J | **28.8** | 35.2 | 1.7 min |
+| nemotron-3 | 80 % | 420 J | 205 J | 8.6 | 45.9 | 3.7 min |
+| gpt-oss-120b | 87 % | 1 290 J | 519 J | 2.8 | 42.5 | 13.1 min |
+| gemma-4 | 97 % | **1 869 J** | 1 079 J | **1.9** | 51.3 | 17.6 min |
+
+**qwen-3.6 and gemma-4 scored identically on this subset and one of them cost
+fifteen times more.** That is the largest gap any axis in this project has
+produced, and no pass rate contains it. On a machine where the choice is which
+model to leave resident, 28.8 tasks per watt-hour against 1.9 is not a
+tiebreaker — it is the decision.
+
+**The difference is time, not draw.** Average power spans 35 to 51 W, a factor
+of 1.5. Wall clock spans 1.7 to 17.6 minutes, a factor of ten. Energy is
+essentially throughput wearing different units, which is worth knowing before
+anyone reaches for a bigger power supply: the fix for an expensive model is a
+faster model, not a cooler one.
+
+The "above idle" column attributes only the draw over the host's 25.4 W
+baseline. It changes the ratios (qwen-3.6 to gemma-4 goes from 15x to 14x) but
+not the conclusion, and it is the fairer number when the machine would be
+powered on regardless. Idle is reported rather than subtracted by default,
+because 125 J/solved on a host idling at 25 W is a different claim from the
+same figure on one idling at 90 W.
+
+Caveats: n = 30, so the pass rates here are a small sample and should be read
+from the 426-task run above; the energy figures are the point of this table.
+Wrong answers count toward the cost — a model that is slow and inaccurate is
+charged twice, which is the honest accounting for what a working result costs.
+
 ### Long-context retrieval, fast profile (2026-08-03)
 
 Bundle `20260803T002533Z-000e8c01`, single-needle retrieval at 4k / 32k / 131k
