@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Overall score reweighted to 0.60 quality / 0.40 speed**, and the speed
+  component now actually has data. It was read only from the `openclaw_speed`
+  suite, which has not run in any recent bundle, so every model scored 0.0 on
+  speed and the weight silently left the total — changing the constant alone
+  would have had no effect whatsoever. Speed now comes from the per-row
+  metrics every suite records, with `openclaw_speed` preferred when present,
+  and with no speed signal at all the weight is redistributed to quality
+  rather than scoring everyone zero on an unmeasured axis. On the energy
+  bundle this moves gemma-4 from first to third: same quality as qwen-3.6, 10
+  tok/s against 74.
 - **The report recommends on cost when quality ties.** The overall ranking
   sorts by score, so it named gemma-4 the default pick over qwen-3.6 — a model
   it cannot separate statistically and which costs 15x less energy per solved

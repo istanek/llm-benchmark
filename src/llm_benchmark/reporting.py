@@ -631,8 +631,12 @@ _QUALITY_SUITE_KEYS: list[str] = [
 ]
 
 # Split between quality and speed in the overall score.
-_QUALITY_WEIGHT = 0.80
-_SPEED_WEIGHT = 0.20
+# Set deliberately, and they are a preference rather than a finding: on a
+# single machine the useful model is the one you will actually wait for, so
+# speed carries close to half the score. Anyone who disagrees should change
+# these two numbers rather than reinterpret the ranking.
+_QUALITY_WEIGHT = 0.60
+_SPEED_WEIGHT = 0.40
 
 
 def _normalize_higher(values: list[float], v: float | None) -> float | None:
@@ -649,6 +653,52 @@ def _normalize_lower(values: list[float], v: float | None) -> float | None:
         return None
     lo, hi = min(values), max(values)
     return 1.0 if lo == hi else (hi - v) / (hi - lo)
+
+
+def speed_signals(
+    aggregate: dict[str, Any], model_names: list[str]
+) -> tuple[dict[str, float], dict[str, float], str]:
+    """Per-model TTFT and decode throughput, from whichever suites ran.
+
+    The ranking used to read these only from ``openclaw_speed``. When that
+    suite was absent — which it was for every bundle this project has produced
+    since the code suites became the focus — every model scored 0.0 on speed
+    and the weight silently vanished from the total. Raising the weight would
+    have changed nothing at all.
+
+    Every suite records the same per-row metrics, so the numbers are there;
+    they were simply not being looked for. ``openclaw_speed`` still wins when
+    present, since it exists to measure exactly this under controlled
+    conditions.
+    """
+    dedicated = _models_by_name(_find_suite(aggregate, "openclaw_speed"))
+    if dedicated:
+        ttfts = {
+            name: float(dedicated[name]["avg_ttft_ms"])
+            for name in model_names
+            if name in dedicated and dedicated[name].get("avg_ttft_ms")
+        }
+        toks = {
+            name: float(dedicated[name]["avg_tokens_per_s"])
+            for name in model_names
+            if name in dedicated and dedicated[name].get("avg_tokens_per_s") is not None
+        }
+        return ttfts, toks, "openclaw_speed"
+
+    ttft_samples: dict[str, list[float]] = {}
+    tok_samples: dict[str, list[float]] = {}
+    for suite in aggregate.get("suites") or []:
+        for model in suite.get("models") or []:
+            name = model.get("model")
+            if name not in model_names:
+                continue
+            if model.get("avg_ttft_ms"):
+                ttft_samples.setdefault(name, []).append(float(model["avg_ttft_ms"]))
+            if model.get("avg_tokens_per_s") is not None:
+                tok_samples.setdefault(name, []).append(float(model["avg_tokens_per_s"]))
+    ttfts = {name: sum(values) / len(values) for name, values in ttft_samples.items()}
+    toks = {name: sum(values) / len(values) for name, values in tok_samples.items()}
+    return ttfts, toks, "suite metrics" if toks else "none"
 
 
 def _overall_rank_rows(aggregate: dict[str, Any], model_names: list[str]) -> list[dict[str, Any]]:
@@ -678,22 +728,15 @@ def _overall_rank_rows(aggregate: dict[str, Any], model_names: list[str]) -> lis
     # Only include suites that produced at least one model result
     active_quality = [k for k in _QUALITY_SUITE_KEYS if quality_data[k]]
 
-    # Load speed data
-    speed_data = _models_by_name(_find_suite(aggregate, "openclaw_speed"))
+    # Load speed data from the dedicated suite when it ran, otherwise from the
+    # metrics every suite already records.
+    ttft_by_model, tok_by_model, speed_source = speed_signals(aggregate, model_names)
     sustained_data = _models_by_name(_find_suite(aggregate, "sustained_throughput"))
 
     # Pre-compute normalisation ranges for speed signals.
     # TTFT: skip zeros (cloud models report 0 when TTFT is unavailable)
-    ttfts = [
-        float(speed_data[n]["avg_ttft_ms"])
-        for n in model_names
-        if n in speed_data and speed_data[n].get("avg_ttft_ms")
-    ]
-    toks = [
-        float(speed_data[n]["avg_tokens_per_s"])
-        for n in model_names
-        if n in speed_data and speed_data[n].get("avg_tokens_per_s") is not None
-    ]
+    ttfts = list(ttft_by_model.values())
+    toks = list(tok_by_model.values())
     sus_toks = [
         float(sustained_data[n]["sustained_tokens_per_s"])
         for n in model_names
@@ -713,9 +756,8 @@ def _overall_rank_rows(aggregate: dict[str, Any], model_names: list[str]) -> lis
 
         # --- Speed score ---
         speed_components: list[float] = []
-        speed_entry = speed_data.get(name, {})
-        ttft = speed_entry.get("avg_ttft_ms")
-        tok_s = speed_entry.get("avg_tokens_per_s")
+        ttft = ttft_by_model.get(name)
+        tok_s = tok_by_model.get(name)
 
         # Only use TTFT when it is non-zero (0.0 means unavailable, e.g. cloud)
         ttft_norm = _normalize_lower(ttfts, float(ttft) if ttft else None)
@@ -732,10 +774,16 @@ def _overall_rank_rows(aggregate: dict[str, Any], model_names: list[str]) -> lis
         if sus_norm is not None:
             speed_components.append(sus_norm)
 
-        speed_score = sum(speed_components) / len(speed_components) if speed_components else 0.0
-
         # --- Overall ---
-        overall_score = quality_score * _QUALITY_WEIGHT + speed_score * _SPEED_WEIGHT
+        # With no speed signal the weight is redistributed to quality rather
+        # than scoring everyone zero on an axis nobody measured: a silent 0.0
+        # is a claim, and "not measured" is not a claim.
+        if speed_components:
+            speed_score = sum(speed_components) / len(speed_components)
+            overall_score = quality_score * _QUALITY_WEIGHT + speed_score * _SPEED_WEIGHT
+        else:
+            speed_score = 0.0
+            overall_score = quality_score
 
         # Collect per-quality-suite rates for display in the HTML report
         suite_rates: dict[str, float | None] = {

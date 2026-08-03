@@ -274,3 +274,72 @@ def test_no_energy_data_means_no_cost_claim() -> None:
     for model in suite["models"]:
         model.pop("energy")
     assert cost_aware_pick({"suites": [suite]}, [{"model": "leader"}, {"model": "rival"}]) is None
+
+
+def _suite_with_speed(name: str, models: list[tuple[str, float, float]]) -> dict:
+    """(model, pass_rate, tokens_per_s) — the shape aggregate_runs produces."""
+    return {
+        "suite": name,
+        "scoring": "pass_fail",
+        "models": [
+            {
+                "model": model,
+                "passes": int(rate * 100),
+                "total": 100,
+                "pass_rate": rate,
+                "avg_tokens_per_s": tps,
+                "avg_ttft_ms": 200.0,
+            }
+            for model, rate, tps in models
+        ],
+    }
+
+
+def test_speed_is_read_from_ordinary_suites_when_the_speed_suite_is_absent() -> None:
+    """It used to be read only from openclaw_speed. That suite has not run in
+    any recent bundle, so every model scored 0.0 on speed and the weight
+    vanished from the total — raising it would have changed nothing."""
+    from llm_benchmark.reporting import speed_signals
+
+    aggregate = {"suites": [_suite_with_speed("code_v1", [("fast", 0.9, 75.0), ("slow", 0.9, 10.0)])]}
+    ttfts, toks, source = speed_signals(aggregate, ["fast", "slow"])
+    assert source == "suite metrics"
+    assert toks == {"fast": 75.0, "slow": 10.0}
+
+
+def test_the_dedicated_speed_suite_still_wins_when_present() -> None:
+    from llm_benchmark.reporting import speed_signals
+
+    aggregate = {
+        "suites": [
+            _suite_with_speed("code_v1", [("m", 0.9, 10.0)]),
+            _suite_with_speed("openclaw_speed", [("m", 1.0, 99.0)]),
+        ]
+    }
+    _, toks, source = speed_signals(aggregate, ["m"])
+    assert source == "openclaw_speed"
+    assert toks == {"m": 99.0}
+
+
+def test_equal_quality_and_unequal_speed_separates_the_ranking() -> None:
+    """The case that prompted the reweighting: two models tied on quality, one
+    seven times slower, previously ranked by a coin flip in the third decimal."""
+    from llm_benchmark.reporting import _overall_rank_rows
+
+    aggregate = {"suites": [_suite_with_speed("code_generation_v1", [("fast", 0.9, 75.0), ("slow", 0.9, 10.0)])]}
+    ranking = _overall_rank_rows(aggregate, ["fast", "slow"])
+    assert [row["model"] for row in ranking] == ["fast", "slow"]
+    assert ranking[0]["overall_score"] > ranking[1]["overall_score"]
+
+
+def test_no_speed_signal_redistributes_the_weight_to_quality() -> None:
+    """Scoring everyone 0.0 on an unmeasured axis is a claim; "not measured"
+    is not. Without speed data the score is quality alone, not quality x 0.6."""
+    from llm_benchmark.reporting import _overall_rank_rows
+
+    suite = _suite_with_speed("code_generation_v1", [("m", 0.9, 0.0)])
+    for model in suite["models"]:
+        model["avg_tokens_per_s"] = None
+        model["avg_ttft_ms"] = None
+    ranking = _overall_rank_rows({"suites": [suite]}, ["m"])
+    assert ranking[0]["overall_score"] == ranking[0]["quality_score"] == 0.9
