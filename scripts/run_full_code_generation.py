@@ -46,9 +46,17 @@ from llm_benchmark.config import (  # noqa: E402
 from llm_benchmark.reporting import aggregate_runs, write_report  # noqa: E402
 from llm_benchmark.results_bundle import make_run_id, write_manifest  # noqa: E402
 from llm_benchmark.runners.registry import build_backend  # noqa: E402
+from llm_benchmark.preflight import Problem, preflight, render_problems  # noqa: E402
 from llm_benchmark.runtime import build_manifest  # noqa: E402
 
 DEFAULT_MODELS = ["qwen-3.6", "gemma-4", "nemotron-3"]
+
+# --benchmark values map to the suite names the preflight and the resolver use.
+SUITE_FOR_BENCHMARK = {
+    "humaneval": "code_generation",
+    "mbpp": "code_generation_mbpp",
+    "mbpp-mutated": "code_generation_mbpp_mutated",
+}
 
 
 def log(message: str) -> None:
@@ -86,6 +94,29 @@ def main() -> int:
     experiment = load_experiment(REPO_ROOT / args.experiment).experiment
     platform_config = load_platform(REPO_ROOT / args.platform)
     backend_config = load_backend(REPO_ROOT / args.backend)
+    # Preflight before the first model is loaded. A missing config is reported
+    # here rather than skipped: a typo in --models used to mean the run simply
+    # measured fewer models than asked for.
+    model_configs = []
+    problems = []
+    for name in args.models:
+        config_path = REPO_ROOT / f"configs/models/{name}.yaml"
+        if config_path.exists():
+            model_configs.append(load_model_config(config_path))
+        else:
+            problems.append(Problem(name, f"no model config at {config_path}", "check the name, or add the YAML"))
+    problems.extend(
+        preflight(
+            REPO_ROOT,
+            suite_names=[SUITE_FOR_BENCHMARK[args.benchmark]],
+            model_configs=model_configs,
+            backend_config=backend_config,
+        )
+    )
+    if problems:
+        log(render_problems(problems))
+        raise SystemExit(2)
+
     suite = {
         "mbpp": load_mbpp_suite,
         "mbpp-mutated": load_mbpp_mutated_suite,

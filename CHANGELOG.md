@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Preflight before every run** (`llm_benchmark.preflight`, plus
+  `llm-bench preflight`) — fixtures load, external corpora are on disk, model
+  tags are pulled, the backend answers, and no model asks for a capability its
+  backend lacks. Runs automatically at the top of every bundle and in the
+  standalone code runner, and can be invoked on its own before an unattended
+  sweep. Written because the 2026-08-02 sweep measured four models for eight
+  hours and then died on its last suite over two Project Gutenberg texts that
+  had never been downloaded — checkable in milliseconds. Every problem is
+  reported at once, each with the command that fixes it: stopping at the first
+  would mean finding the second after the next eight-hour attempt. It reports
+  and refuses; it never repairs, because a preflight that quietly fetches a
+  corpus or drops a suite decides what the run measures.
 - **First contamination result** (`RESULTS.md`) — no model in the lineup shows
   a confirmed signal on MBPP. gemma-4, qwen-3.6 and nemotron-3 drop by under
   2.5 points on the reworded set (p = 0.71 / 0.86 / 0.21). gpt-oss-120b drops

@@ -260,6 +260,23 @@ generator's own validation, and the reason is worth keeping:
 Both are the same lesson this repo keeps relearning: **validate through the
 path the real thing takes**, not the path that is convenient to check.
 
+### Preflight
+
+Every run verifies what it needs before loading the first model: fixtures
+parse, external corpora exist, model tags are pulled, the backend answers, and
+no model asks for a capability the backend cannot provide. `llm-bench
+preflight --experiment <yaml>` runs the same checks without starting anything.
+
+The rule is that all problems are reported together, each with its fix, and
+none of them are repaired automatically. Fixing them silently — fetching the
+corpus, skipping the unsatisfiable suite — would quietly change what the run
+measures, which is the failure this project keeps meeting in other forms.
+
+It exists because a sweep spent eight hours on four models and then died on
+its last suite over two missing text files. The ordering discipline saved the
+rest of that run (cheapest suites first, each writing its summary as it
+finishes), but the check itself cost nothing and was simply absent.
+
 ### Comparing a new model against stored results
 
 Re-measuring the incumbents for every candidate is not affordable — one MBPP

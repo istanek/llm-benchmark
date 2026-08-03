@@ -25,6 +25,7 @@ from llm_benchmark.long_context import (
     run_long_context_suite,
 )
 from llm_benchmark.models import BackendConfig, GenerationResult, ModelConfig, SamplingConfig
+from llm_benchmark.preflight import preflight, render_problems
 from llm_benchmark.results_bundle import write_json, write_manifest, write_result
 from llm_benchmark.reliability import (
     build_summary,
@@ -223,6 +224,17 @@ def run_benchmark_bundle(
     plan: BenchmarkPlan,
     progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
+    # Before anything is loaded or written: an eight-hour sweep once died on
+    # its last suite because two corpus files had never been downloaded.
+    problems = preflight(
+        repo_root,
+        suite_names=list(plan.selected_suites),
+        model_configs=list(model_configs),
+        backend_config=backend_config,
+    )
+    if problems:
+        raise RuntimeError(render_problems(problems))
+
     bundle_dir.mkdir(parents=True, exist_ok=True)
     # ExperimentSpec carries these; before 0.5.3 nothing read them, so every
     # suite silently ran exactly once with no warmup regardless of the YAML.

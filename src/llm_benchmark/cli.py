@@ -47,6 +47,7 @@ from llm_benchmark.orchestration import (
     run_benchmark_bundle,
     run_openclaw_speed_suite,
 )
+from llm_benchmark.preflight import preflight, render_problems
 from llm_benchmark.quant_sweep import enrich_with_quant_sweep
 from llm_benchmark.reporting import aggregate_runs, render_cli_benchmark_summary, write_report
 from llm_benchmark.reliability import (
@@ -1384,6 +1385,37 @@ def compare_command(
         )
     if blockers and not force:
         raise typer.Exit(code=2)
+
+
+@app.command("preflight")
+def preflight_command(
+    experiment: Path = typer.Option(..., "--experiment", exists=True, dir_okay=False),
+    platform: str = typer.Option("local", "--platform"),
+    suite: list[str] = typer.Option(None, "--suite", help="Override the experiment's suites."),
+) -> None:
+    """Check that a run could start, without starting it.
+
+    Run it before an unattended sweep. The same checks run automatically at the
+    top of every bundle, but knowing at 17:00 that a corpus is missing is worth
+    more than finding out at 02:00.
+    """
+    maybe_print_banner()
+    repo_root, experiment_spec, backend_config, model_configs = load_runtime_context(
+        experiment, platform
+    )
+    suites = list(suite) if suite else list(experiment_spec.suites)
+    problems = preflight(
+        repo_root,
+        suite_names=suites,
+        model_configs=list(model_configs),
+        backend_config=backend_config,
+    )
+    if problems:
+        typer.echo(render_problems(problems))
+        raise typer.Exit(code=2)
+    typer.echo(
+        f"preflight clear: {len(suites)} suite(s), {len(model_configs)} model(s), backend reachable"
+    )
 
 
 @app.command()
