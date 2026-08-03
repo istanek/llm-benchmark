@@ -39,7 +39,12 @@ class EnergyWindow:
     joules: float = 0.0
     seconds: float = 0.0
     samples: int = 0
-    idle_watts: float | None = None
+    # Sampled immediately before this model runs, which for any model after
+    # the first includes the previous one's residual draw: measured baselines
+    # across one four-model bundle were 13.5 / 23.5 / 25.4 / 21.7 W in run
+    # order. Only the first is a cold idle. Named "baseline" rather than
+    # "idle" so nobody subtracts it believing it is one.
+    baseline_watts: float | None = None
     source: str = "none"
 
     @property
@@ -60,7 +65,7 @@ class EnergyWindow:
             "avg_power_w": round(self.average_watts, 1),
             "samples": self.samples,
             "telemetry_source": self.source,
-            "idle_power_w": round(self.idle_watts, 1) if self.idle_watts is not None else None,
+            "baseline_power_w": round(self.baseline_watts, 1) if self.baseline_watts is not None else None,
         }
         if solved is not None:
             per_solved = self.joules_per_solved(solved)
@@ -103,15 +108,15 @@ class EnergyMeter:
         self._t0 = time.monotonic()
         self._sampler.start(self._t0)
 
-    def stop(self, model: str, *, idle_watts: float | None = None) -> EnergyWindow:
+    def stop(self, model: str, *, baseline_watts: float | None = None) -> EnergyWindow:
         import time
 
         elapsed = time.monotonic() - self._t0
         if self._sampler is None:
-            return EnergyWindow(model=model, seconds=elapsed)
+            return EnergyWindow(model=model, seconds=elapsed, baseline_watts=baseline_watts)
         self._sampler.stop()
         window = integrate(self._sampler.samples, model=model, fallback_seconds=elapsed)
-        window.idle_watts = idle_watts
+        window.baseline_watts = baseline_watts
         window.source = self._sampler.source
         return window
 
@@ -146,8 +151,13 @@ def integrate(samples: list[Any], *, model: str, fallback_seconds: float = 0.0) 
     )
 
 
-def measure_idle_watts(seconds: float = 3.0, hz: float = 2.0) -> float | None:
-    """Average draw with nothing running, as context for the per-model figures."""
+def measure_baseline_watts(seconds: float = 3.0, hz: float = 2.0) -> float | None:
+    """Average draw right now, as context for the figures that follow.
+
+    Not necessarily an idle machine: called between models, it sees the
+    previous one still settling. The lowest baseline in a bundle is the only
+    one that approximates a cold host.
+    """
     import time
 
     from llm_benchmark.sustained_throughput import TelemetrySampler

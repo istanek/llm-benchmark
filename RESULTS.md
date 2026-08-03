@@ -64,14 +64,14 @@ bracket was saying, now with a test behind it.
 Measured, not modelled: GPU power sampled at 2 Hz while each model answered
 and integrated over its own window. Bundle `20260803T014417Z-e8f10ced`, MBPP,
 30 tasks per model — a subset, because power is a steady-state property and
-does not need 426 tasks to establish. Idle draw on this host: **25.4 W**.
+does not need 426 tasks to establish. Host baseline: **13.5 W**.
 
-| model | pass@1 (n=30) | J / solved | above idle | tasks / Wh | avg W | wall clock |
+| model | pass@1 (n=30) | J / solved | above baseline | tasks / Wh | avg W | wall clock |
 |---|---|---|---|---|---|---|
 | qwen-3.6 | 97 % | **125 J** | 77 J | **28.8** | 35.2 | 1.7 min |
-| nemotron-3 | 80 % | 420 J | 205 J | 8.6 | 45.9 | 3.7 min |
-| gpt-oss-120b | 87 % | 1 290 J | 519 J | 2.8 | 42.5 | 13.1 min |
-| gemma-4 | 97 % | **1 869 J** | 1 079 J | **1.9** | 51.3 | 17.6 min |
+| nemotron-3 | 80 % | 420 J | 296 J | 8.6 | 45.9 | 3.7 min |
+| gpt-oss-120b | 87 % | 1 290 J | 879 J | 2.8 | 42.5 | 13.1 min |
+| gemma-4 | 97 % | **1 869 J** | 1 378 J | **1.9** | 51.3 | 17.6 min |
 
 **qwen-3.6 and gemma-4 scored identically on this subset and one of them cost
 fifteen times more.** That is the largest gap any axis in this project has
@@ -85,12 +85,21 @@ essentially throughput wearing different units, which is worth knowing before
 anyone reaches for a bigger power supply: the fix for an expensive model is a
 faster model, not a cooler one.
 
-The "above idle" column attributes only the draw over the host's 25.4 W
-baseline. It changes the ratios (qwen-3.6 to gemma-4 goes from 15x to 14x) but
-not the conclusion, and it is the fairer number when the machine would be
-powered on regardless. Idle is reported rather than subtracted by default,
-because 125 J/solved on a host idling at 25 W is a different claim from the
-same figure on one idling at 90 W.
+The "above baseline" column attributes only the draw over the host's 13.5 W
+floor. It widens the gap slightly (qwen-3.6 to gemma-4 goes from 15x to 18x)
+and is the fairer number when the machine would be powered on regardless. The
+baseline is reported rather than subtracted by default, because 125 J/solved
+on a host drawing 13.5 W at rest is a different claim from the same figure on
+one drawing 90 W.
+
+**A correction to the first version of this table**, which used 25.4 W as the
+baseline for every model. The baseline is sampled just before each model runs,
+and every model after the first still sees the previous one settling: the four
+readings were 13.5 / 23.5 / 25.4 / 21.7 W in run order. Only the first is a
+cold machine. The field is now called `baseline_power_w` rather than
+`idle_power_w`, and the report uses the lowest reading in the bundle so the
+column is comparable across models rather than charging later models a higher
+floor for no reason of their own.
 
 Caveats: n = 30, so the pass rates here are a small sample and should be read
 from the 426-task run above; the energy figures are the point of this table.

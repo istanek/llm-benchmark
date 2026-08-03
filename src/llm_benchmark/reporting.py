@@ -191,6 +191,10 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
                 # pass rate nobody can check.
                 "unscorable",
                 "unscorable_task_ids",
+                # Joules per solved task and friends. Measured once, at run
+                # time, and impossible to recover afterwards — a summary field
+                # that never reaches the report is a measurement nobody sees.
+                "energy",
                 # Per-window throughput series (sustained_throughput) — used
                 # by the HTML renderer to draw a tps-over-time line chart.
                 # Discarded by the markdown / CLI summaries since they only
@@ -296,6 +300,71 @@ def aggregate_runs(runs_root: Path) -> dict[str, Any]:
             "generations_from": reused_from[0] if reused_from else None,
         },
     }
+
+
+def _energy_markdown(suite: dict[str, Any]) -> list[str]:
+    """What a correct answer cost in joules.
+
+    Kept next to the pass rate for the same reason verbosity is: on a
+    single-machine benchmark the cost of a result is part of the result. Two
+    models tied on accuracy and separated fifteenfold on energy are not
+    interchangeable, and nothing else in the report says so.
+    """
+    entries = [
+        (model, model["energy"])
+        for model in suite.get("models") or []
+        if isinstance(model.get("energy"), dict) and model["energy"].get("samples")
+    ]
+    if not entries:
+        return []
+    entries.sort(key=lambda pair: pair[1].get("joules_per_solved_task") or 0.0)
+
+    # The lowest baseline in the bundle, not the first: each is sampled just
+    # before its model runs, so every one after the first still carries the
+    # previous model's residual draw (13.5 / 23.5 / 25.4 / 21.7 W in one
+    # four-model run). Using each model's own would charge the later ones a
+    # higher floor for no reason of their own, and using the first found
+    # depends on directory order.
+    baselines = [
+        energy["baseline_power_w"]
+        for _, energy in entries
+        if energy.get("baseline_power_w") is not None
+    ]
+    idle = min(baselines) if baselines else None
+    source = next((energy.get("telemetry_source") for _, energy in entries), "unknown")
+
+    lines = [
+        "### Energy",
+        "",
+        "| model | J / solved | above idle | tasks / Wh | avg W | wall clock |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for model, energy in entries:
+        solved = int(model.get("passes") or 0)
+        seconds = float(energy.get("seconds") or 0.0)
+        watts = float(energy.get("avg_power_w") or 0.0)
+        above = (
+            f"{(watts - idle) * seconds / solved:.0f} J"
+            if idle is not None and solved and watts > idle
+            else "-"
+        )
+        per_solved = energy.get("joules_per_solved_task")
+        lines.append(
+            f"| {model['model']} | {f'{per_solved:.0f} J' if per_solved else '-'} | {above} "
+            f"| {energy.get('tasks_per_wh') or '-'} | {watts:.1f} | {seconds / 60:.1f} min |"
+        )
+    lines.append("")
+    lines.append(
+        f"_Sampled via {source} while each model answered and integrated over its own window; "
+        f"host baseline {idle if idle is not None else 'unknown'} W (lowest of "
+        f"{', '.join(f'{value:.1f}' for value in sorted(baselines))} W, each sampled just before "
+        "its model — only the first is a cold idle). Wrong answers count toward "
+        "the cost, so a model that is slow and inaccurate is charged twice. The 'above idle' "
+        "column attributes only the draw over the baseline, which is the fairer figure when the "
+        "machine would be powered on regardless._"
+    )
+    lines.append("")
+    return lines
 
 
 def _verbosity_markdown(suite: dict[str, Any]) -> list[str]:
@@ -441,6 +510,7 @@ def render_markdown_report(aggregate: dict[str, Any]) -> str:
             lines.append("")
             lines.append("_Timing probe — pass/fail is not scored; read the latency and throughput columns._")
         lines.extend(_verbosity_markdown(suite))
+        lines.extend(_energy_markdown(suite))
         unscorable_total = sum(int(m.get("unscorable") or 0) for m in suite["models"])
         if unscorable_total:
             lines.append("")

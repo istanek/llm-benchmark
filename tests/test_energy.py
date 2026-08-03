@@ -97,10 +97,11 @@ def test_no_solved_tasks_yields_no_cost_claim_rather_than_infinity() -> None:
     assert payload["joules_per_solved_task"] is None
 
 
-def test_idle_draw_is_reported_not_subtracted() -> None:
-    """200 J/solved on a host idling at 15 W means something different from the
-    same figure at 90 W. Subtracting it silently would hide which one you have."""
-    window = EnergyWindow(model="m", joules=1000.0, seconds=10.0, idle_watts=13.7)
+def test_the_baseline_is_reported_not_subtracted() -> None:
+    """200 J/solved on a host drawing 15 W at rest means something different
+    from the same figure at 90 W. Subtracting it silently would hide which one
+    you have — and the baseline is not even a true idle after the first model."""
+    window = EnergyWindow(model="m", joules=1000.0, seconds=10.0, baseline_watts=13.7)
     payload = window.to_dict(solved=5)
-    assert payload["idle_power_w"] == 13.7
+    assert payload["baseline_power_w"] == 13.7
     assert payload["joules_per_solved_task"] == 200.0

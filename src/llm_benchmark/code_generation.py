@@ -29,7 +29,7 @@ from llm_benchmark.models import (
     SamplingConfig,
     is_truncated,
 )
-from llm_benchmark.energy import EnergyMeter, measure_idle_watts
+from llm_benchmark.energy import EnergyMeter, measure_baseline_watts
 from llm_benchmark.results_bundle import write_json, write_result
 from llm_benchmark.suites import SuiteDefinition, SuiteTask, load_suite_definition
 
@@ -655,7 +655,7 @@ def run_code_generation_suite(
         raise ValueError("task_limit must be >= 1 when set")
     selected_tasks = suite.tasks[:task_limit] if task_limit else suite.tasks
     total_tasks = len(selected_tasks)
-    idle_watts = measure_idle_watts(2.0) if measure_energy else None
+    baseline_watts = measure_baseline_watts(2.0) if measure_energy else None
     energy_by_model: dict[str, dict[str, Any]] = {}
 
     for model_config in model_configs:
@@ -738,7 +738,7 @@ def run_code_generation_suite(
             )
             progress_callback(f"  unloading {model_config.name} from Ollama")
         if meter is not None:
-            window = meter.stop(model_config.name, idle_watts=idle_watts)
+            window = meter.stop(model_config.name, baseline_watts=baseline_watts)
             solved = sum(1 for outcome in outcomes if outcome.pass_at_1 >= 1.0)
             energy_by_model[model_config.name] = window.to_dict(solved=solved)
             if progress_callback and window.samples:

@@ -1464,6 +1464,57 @@ def _overall_rankings_cards_html(ranking: list[dict[str, Any]]) -> str:
 # --------------------------------------------------------------------- #
 
 
+def _render_energy_section(suites: list[dict[str, Any]]) -> str:
+    """Joules per solved task — the cost of a result, beside the result."""
+    rows: list[str] = []
+    baselines: list[float] = []
+    source = "unknown"
+    for suite in suites:
+        entries = [
+            (model, model["energy"])
+            for model in suite.get("models") or []
+            if isinstance(model.get("energy"), dict) and model["energy"].get("samples")
+        ]
+        for model, energy in sorted(entries, key=lambda pair: pair[1].get("joules_per_solved_task") or 0.0):
+            if energy.get("baseline_power_w") is not None:
+                baselines.append(float(energy["baseline_power_w"]))
+            source = energy.get("telemetry_source") or source
+            rows.append(
+                "<tr>"
+                f"<td>{_esc(model['model'])}</td>"
+                f"<td class='num'>{_esc(energy.get('joules_per_solved_task'))} J</td>"
+                f"<td class='num'>{_esc(energy.get('tasks_per_wh'))}</td>"
+                f"<td class='num'>{_fmt_num(energy.get('avg_power_w'))} W</td>"
+                f"<td class='num'>{_fmt_num((energy.get('seconds') or 0) / 60)} min</td>"
+                "</tr>"
+            )
+    if not rows:
+        return ""
+
+    floor = f"{min(baselines):.1f}" if baselines else "unknown"
+    parts = ['<section class="card">', "<h2>Energy per solved task</h2>"]
+    parts.append(
+        '<p class="note">Measured, not modelled: GPU power sampled while each model answered and '
+        "integrated over its own window. Wrong answers count toward the cost, so a model that is "
+        "slow and inaccurate is charged twice — the honest accounting for what a working result "
+        "costs on this machine.</p>"
+    )
+    parts.append(
+        "<table><thead><tr><th>Model</th><th class='num'>J / solved</th>"
+        "<th class='num'>Tasks / Wh</th><th class='num'>Avg power</th>"
+        "<th class='num'>Wall clock</th></tr></thead><tbody>"
+    )
+    parts.extend(rows)
+    parts.append("</tbody></table>")
+    parts.append(
+        f'<p class="note">Sampled via {_esc(source)}; host baseline {floor} W. Each baseline is '
+        "taken just before its model runs, so every one after the first still carries the previous "
+        "model&rsquo;s residual draw — the lowest is the only cold reading.</p>"
+    )
+    parts.append("</section>")
+    return "".join(parts)
+
+
 def _render_verbosity_section(suites: list[dict[str, Any]]) -> str:
     """Length, density and cost per model — an axis, not a footnote.
 
@@ -1799,6 +1850,7 @@ def render_canonical_report_html(
     # Run conditions — what was asked of each model, and by which harness
     # ------------------------------------------------------------- #
     body.append(_render_verbosity_section(suites))
+    body.append(_render_energy_section(suites))
     body.append(_render_conditions_section(aggregate.get("conditions") or {}))
 
     # ------------------------------------------------------------- #

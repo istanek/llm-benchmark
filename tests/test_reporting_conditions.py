@@ -159,3 +159,51 @@ def test_unscorable_answers_are_declared_in_the_report(tmp_path: Path) -> None:
     report = render_markdown_report(aggregate_runs(tmp_path))
     assert "could not be scored" in report
     assert "not a measurement" in report
+
+
+def test_energy_reaches_the_report(tmp_path: Path) -> None:
+    """It is written to summary.json at run time and cannot be recovered later,
+    so a field that never reaches the report is a measurement nobody sees."""
+    run_dir = tmp_path / "code_generation-m"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(json.dumps({**MANIFEST, "provenance": PROVENANCE}))
+    (run_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "suite": "code_generation_v1",
+                "suite_version": "0.3.0",
+                "models": [
+                    {
+                        "model": "thrifty",
+                        "passes": 10,
+                        "total": 10,
+                        "energy": {
+                            "energy_j": 1250.0, "seconds": 60.0, "avg_power_w": 35.0,
+                            "samples": 120, "telemetry_source": "nvidia-smi",
+                            "baseline_power_w": 13.5, "joules_per_solved_task": 125.0,
+                            "tasks_per_wh": 28.8,
+                        },
+                    },
+                    {
+                        "model": "costly",
+                        "passes": 10,
+                        "total": 10,
+                        "energy": {
+                            "energy_j": 18690.0, "seconds": 1056.0, "avg_power_w": 51.3,
+                            "samples": 2116, "telemetry_source": "nvidia-smi",
+                            "baseline_power_w": 21.7, "joules_per_solved_task": 1869.0,
+                            "tasks_per_wh": 1.93,
+                        },
+                    },
+                ],
+            }
+        )
+    )
+    (run_dir / "results.jsonl").write_text("")
+
+    report = render_markdown_report(aggregate_runs(tmp_path))
+    assert "### Energy" in report
+    assert "1869 J" in report and "125 J" in report
+    # The lowest baseline, not the first encountered: later models carry the
+    # previous one's residual draw.
+    assert "host baseline 13.5 W" in report
