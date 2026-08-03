@@ -29,6 +29,7 @@ from llm_benchmark.models import (
     SamplingConfig,
     is_truncated,
 )
+from llm_benchmark.energy import EnergyMeter, measure_idle_watts
 from llm_benchmark.results_bundle import write_json, write_result
 from llm_benchmark.suites import SuiteDefinition, SuiteTask, load_suite_definition
 
@@ -606,9 +607,15 @@ def run_code_generation_suite(
     seeds: list[int] | None = None,
     task_limit: int | None = None,
     reference_scores_path: Path | None = None,
+    measure_energy: bool = True,
     progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     """Run the code generation suite against all models.
+
+    ``measure_energy`` samples GPU power while each model answers and records
+    joules per solved task. It costs one background thread polling at 2 Hz and
+    is on by default: the cost of a correct answer is a first-class result on a
+    single-machine benchmark, and an axis nobody collects retroactively.
 
     Args:
       num_samples_per_task: total samples per task. pass@1 uses 1; pass@10
@@ -648,10 +655,18 @@ def run_code_generation_suite(
         raise ValueError("task_limit must be >= 1 when set")
     selected_tasks = suite.tasks[:task_limit] if task_limit else suite.tasks
     total_tasks = len(selected_tasks)
+    idle_watts = measure_idle_watts(2.0) if measure_energy else None
+    energy_by_model: dict[str, dict[str, Any]] = {}
+
     for model_config in model_configs:
         if progress_callback:
             progress_callback(f"  loading {model_config.name} for code generation")
         backend.load_model(model_config)
+        # Started after the model is loaded so the figure covers answering,
+        # not the one-off cost of paging 65 GB of weights into memory.
+        meter = EnergyMeter() if measure_energy else None
+        if meter is not None:
+            meter.start()
         outcomes: list[TaskOutcome] = []
         for idx, task in enumerate(selected_tasks, start=1):
             if progress_callback:
@@ -722,6 +737,16 @@ def run_code_generation_suite(
                 f"  {model_config.name} finished coding suite — {passed}/{total_tasks} passed"
             )
             progress_callback(f"  unloading {model_config.name} from Ollama")
+        if meter is not None:
+            window = meter.stop(model_config.name, idle_watts=idle_watts)
+            solved = sum(1 for outcome in outcomes if outcome.pass_at_1 >= 1.0)
+            energy_by_model[model_config.name] = window.to_dict(solved=solved)
+            if progress_callback and window.samples:
+                per_solved = energy_by_model[model_config.name]["joules_per_solved_task"]
+                progress_callback(
+                    f"  {model_config.name} energy: {window.joules:.0f} J at "
+                    f"{window.average_watts:.0f} W avg, {per_solved} J per solved task"
+                )
         backend.unload()
         per_model_outcomes[model_config.name] = outcomes
 
@@ -731,12 +756,13 @@ def run_code_generation_suite(
         per_benchmark = _aggregate_per_model(outcomes)
         for bench_name, bucket in per_benchmark.items():
             pass1_by_model_benchmark.setdefault(model_name, {})[bench_name] = bucket["pass_at_1"]
-        model_summaries.append(
-            {
-                "model": model_name,
-                "benchmarks": list(per_benchmark.values()),
-            }
-        )
+        entry = {
+            "model": model_name,
+            "benchmarks": list(per_benchmark.values()),
+        }
+        if model_name in energy_by_model:
+            entry["energy"] = energy_by_model[model_name]
+        model_summaries.append(entry)
 
     comparisons: list[ReferenceComparison] = []
     if reference_scores_path is not None and reference_scores_path.exists():
