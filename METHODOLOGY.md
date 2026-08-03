@@ -262,7 +262,7 @@ path the real thing takes**, not the path that is convenient to check.
 
 ### The overall score, and what it weighs
 
-`_QUALITY_WEIGHT = 0.60`, `_SPEED_WEIGHT = 0.40`. These are a stated
+`_QUALITY_WEIGHT = 0.70`, `_SPEED_WEIGHT = 0.30`. These are a stated
 preference, not a finding: on a single machine the useful model is the one you
 will actually wait for, and a benchmark that weighs accuracy at 80 % ranks a
 model you would never leave running above one you would. Anyone who disagrees
@@ -283,16 +283,27 @@ measured" is not a claim.
 The effect on the 30-task energy bundle, where gemma-4 and qwen-3.6 score
 identically on quality:
 
-| model | quality | speed | overall (0.6/0.4) | previously (0.8/0.2) |
-|---|---|---|---|---|
-| qwen-3.6 | 0.967 | 0.993 | **0.977** | 0.773 (2nd) |
-| nemotron-3 | 0.800 | 0.922 | 0.849 | 0.640 |
-| gemma-4 | 0.967 | 0.147 | 0.639 | 0.773 (1st) |
-| gpt-oss-120b | 0.867 | 0.213 | 0.605 | 0.693 |
+| model | quality | speed | overall (0.7/0.3) |
+|---|---|---|---|
+| qwen-3.6 | 0.967 | 0.993 | **0.975** |
+| nemotron-3 | 0.800 | 0.922 | 0.837 |
+| gemma-4 | 0.967 | 0.147 | 0.721 |
+| gpt-oss-120b | 0.867 | 0.213 | 0.671 |
 
 gemma-4 goes from first to third on a run where it decodes at 10 tok/s against
-qwen-3.6's 74. Whether that is the right ordering is a judgement about how the
-machine is used; the point is that the number now reflects it either way.
+qwen-3.6's 74.
+
+**Most of that move is the data fix, not the weight.** With speed actually
+flowing into the score, gemma-4 falls below nemotron-3 at any speed weight
+above **0.177** — including the original 0.20. The weight decides the margins;
+what decides this ordering is that a model matching the best on accuracy while
+decoding seven times slower is no longer scored as though the difference did
+not exist.
+
+Whether nemotron-3 *should* outrank gemma-4 — trading nearly 17 points of
+quality for speed — is a judgement about how the machine is used, and the
+crossover is stated here so it can be made deliberately rather than
+discovered.
 
 ### What the report recommends, and why it is not the top of the ranking
 

@@ -635,8 +635,8 @@ _QUALITY_SUITE_KEYS: list[str] = [
 # single machine the useful model is the one you will actually wait for, so
 # speed carries close to half the score. Anyone who disagrees should change
 # these two numbers rather than reinterpret the ranking.
-_QUALITY_WEIGHT = 0.60
-_SPEED_WEIGHT = 0.40
+_QUALITY_WEIGHT = 0.70
+_SPEED_WEIGHT = 0.30
 
 
 def _normalize_higher(values: list[float], v: float | None) -> float | None:
