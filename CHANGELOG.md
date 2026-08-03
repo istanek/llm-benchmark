@@ -108,8 +108,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Grounding v2 wired in as a provisional suite** —
   `hallucination_grounding_v2`, 14 near-miss tasks where a plausible wrong
   answer sits inside the context. v1 scores 100 % for every model and cannot
-  say which one invents less; v2 gives qwen-3.6 14/14, nemotron-3 13/14 and
-  gpt-oss-120b 11/14. Adds a fourth scored behaviour, `report_conflict`: when
+  say which one invents less; **v2 turned out to be saturated as well** —
+  14/14 for qwen-3.6, gpt-oss-120b and gemma-4, 13/14 for nemotron-3. A
+  reading of 14 / 13 / 11 earlier the same day looked like discrimination and
+  was mostly the scorer defects fixed below. Adds a fourth scored behaviour,
+  `report_conflict`: when
   the context contradicts itself, every conflicting value must appear and the
   disagreement must be named. Quoting both and picking a side anyway is the
   failure it exists to catch.
