@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Long-context results** (`RESULTS.md`) — every model retrieves a needle at
+  every depth up to 131k tokens, so retrieval joins grounding and structured
+  output as a suite that cannot rank this lineup. Prefill throughput at 131k
+  does separate them, by 7x: nemotron-3 2 498 tok/s against gemma-4's 344,
+  which is fifty seconds of prefill against six minutes. gemma-4 leads on code
+  and trails badly here, so the recommendation depends on input length.
 - **Preflight before every run** (`llm_benchmark.preflight`, plus
   `llm-bench preflight`) — fixtures load, external corpora are on disk, model
   tags are pulled, the backend answers, and no model asks for a capability its

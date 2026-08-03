@@ -59,6 +59,41 @@ nemotron-3 is alone at the bottom. Its "third place, 78.9 %" is a fact about a
 1536-token budget, not about the model — which is what the floor-ceiling
 bracket was saying, now with a test behind it.
 
+### Long-context retrieval, fast profile (2026-08-03)
+
+Bundle `20260803T002533Z-000e8c01`, single-needle retrieval at 4k / 32k / 131k
+tokens by 0 % / 50 % / 100 % depth, 18 cells per model.
+
+| model | retrieved | prefill 4k | 32k | **131k** |
+|---|---|---|---|---|
+| nemotron-3 | 18/18 | 2 031 | 2 541 | **2 498** tok/s |
+| qwen-3.6 | 18/18 | 2 003 | 2 275 | **1 979** tok/s |
+| gpt-oss-120b | 18/18 | 1 431 | 1 698 | **1 240** tok/s |
+| gemma-4 | 17/17 (last cell running) | 678 | 657 | **344** tok/s |
+
+**Retrieval does not separate these models.** Every cell passed, at every depth,
+including a full 131k-token context. This is the fourth suite in a row that
+gives everyone full marks — after grounding v1, grounding v2 and structured
+output — and it means the quality side of this benchmark currently rests
+entirely on the code suite.
+
+**Prefill throughput separates them by a factor of seven.** gemma-4 loads a
+131k context at 344 tok/s against nemotron-3's 2 498: roughly six minutes of
+prefill per query, against fifty seconds. That is the difference between a
+model you can point at a large file and one you cannot, and no pass rate
+anywhere in this report contains it.
+
+It also inverts the ranking. gemma-4 is the best of these four on code
+(87.6 %) and the worst on long-context latency by a wide margin. **"Which model
+should I use" has a different answer depending on how long the inputs are** —
+which is the kind of trade-off this project exists to surface, and the first
+time a run has produced one.
+
+A caveat on the retrieval result: the fast profile is 18 cells with a single
+needle each. The full grid (128 cells, four lengths by four depths) is where a
+difference in retrieval would show up if there is one. What this run supports
+is "none of them fails outright at 131k", not "they retrieve equally well".
+
 ### Contamination probe (2026-08-03)
 
 The same 426 problems reworded — renamed entry points, paraphrased prose,
